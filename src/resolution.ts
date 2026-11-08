@@ -85,6 +85,8 @@ export interface RefResolution {
   ref: string;
   model?: string;
   variant?: string;
+  /** Names of the other model settings the ref sets: temperature, top_p and each provider option. */
+  settings?: string[];
   source: "profile" | "defaults" | "unresolved";
   /** Set when no connected provider offers the model, so agents keep OpenCode's model. */
   unavailable?: true;
@@ -99,6 +101,11 @@ export interface RefAssignment {
   variant?: string;
   ownModel?: string;
   ownVariant?: string;
+  /** The ref's sampling settings and the agent's own, for requests that run on another model. */
+  temperature?: number;
+  top_p?: number;
+  ownTemperature?: number;
+  ownTopP?: number;
   /** False when the model was known to be unavailable, so the agent kept its own model. */
   applied: boolean;
 }
@@ -126,6 +133,92 @@ function resolveRef(
   return defaultChoice === undefined
     ? undefined
     : { choice: defaultChoice, source: "defaults" };
+}
+
+/** Merges like OpenCode merges agent options: nested objects key by key, anything else replaced. */
+export function mergeOptions(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    const current = merged[key];
+    merged[key] =
+      isRecord(current) && isRecord(value)
+        ? mergeOptions(current, value)
+        : value;
+  }
+  return merged;
+}
+
+/** The names of what a ref sets besides its model and variant, for the report. */
+export function settingNames(choice: ModelChoice): string[] {
+  return [
+    ...(choice.temperature === undefined ? [] : ["temperature"]),
+    ...(choice.top_p === undefined ? [] : ["top_p"]),
+    ...Object.keys(choice.options ?? {}),
+  ];
+}
+
+/**
+ * Sets a ref's model and settings on an agent: the ref's model, variant, temperature and top_p replace the agent's,
+ * and its options are merged over the agent's own options, the ref winning where both set a key.
+ */
+function applyChoice(
+  agent: Record<string, unknown>,
+  choice: ModelChoice,
+): void {
+  agent.model = choice.model;
+  if (choice.variant !== undefined) {
+    agent.variant = choice.variant;
+  }
+  if (choice.temperature !== undefined) {
+    agent.temperature = choice.temperature;
+  }
+  if (choice.top_p !== undefined) {
+    agent.top_p = choice.top_p;
+  }
+  if (choice.options !== undefined) {
+    agent.options = mergeOptions(
+      isRecord(agent.options) ? agent.options : {},
+      choice.options,
+    );
+  }
+}
+
+/** The sampling settings OpenCode sends with a request, as `chat.params` sees them. */
+export interface SamplingParams {
+  temperature?: number;
+  topP?: number;
+}
+
+/**
+ * A ref's `temperature` and `top_p` suit its model, and some providers refuse a request that pairs them with another
+ * model's settings. So a request from an agent whose ref applied, but which runs on another model (a fallback, or a
+ * model picked by hand), gets the agent's own values back, or the provider's default when it had none.
+ */
+export function restoreOwnSampling(
+  assignments: readonly RefAssignment[],
+  agent: string,
+  model: string,
+  params: SamplingParams,
+): void {
+  const assignment = assignments.find(
+    (candidate) => candidate.agent === agent && candidate.applied,
+  );
+  if (assignment === undefined || assignment.model === model) {
+    return;
+  }
+  // OpenCode leaves temperature unset for a model that does not take one; that stays as it is.
+  if (
+    assignment.temperature !== undefined &&
+    params.temperature !== undefined
+  ) {
+    params.temperature = assignment.ownTemperature;
+  }
+  if (assignment.top_p !== undefined) {
+    params.topP = assignment.ownTopP;
+  }
 }
 
 function withoutModelRef(agent: Record<string, unknown>): {
@@ -214,13 +307,20 @@ export function applyModelRefs(
         ...(typeof agent.variant === "string"
           ? { ownVariant: agent.variant }
           : {}),
+        ...(resolved.choice.temperature === undefined
+          ? {}
+          : { temperature: resolved.choice.temperature }),
+        ...(resolved.choice.top_p === undefined
+          ? {}
+          : { top_p: resolved.choice.top_p }),
+        ...(typeof agent.temperature === "number"
+          ? { ownTemperature: agent.temperature }
+          : {}),
+        ...(typeof agent.top_p === "number" ? { ownTopP: agent.top_p } : {}),
         applied,
       });
       if (applied) {
-        agent.model = resolved.choice.model;
-        if (resolved.choice.variant !== undefined) {
-          agent.variant = resolved.choice.variant;
-        }
+        applyChoice(agent, resolved.choice);
       }
     }
     if (
@@ -252,6 +352,7 @@ export function applyModelRefs(
       return { ref, source: "unresolved", agents: users };
     }
     const unavailable = !isAvailable(resolved.choice.model);
+    const settings = settingNames(resolved.choice);
     if (unavailable && users.length > 0) {
       notices.push(
         unavailableModelNotice(
@@ -271,6 +372,7 @@ export function applyModelRefs(
       ...(resolved.choice.variant === undefined
         ? {}
         : { variant: resolved.choice.variant }),
+      ...(settings.length === 0 ? {} : { settings }),
       source: resolved.source,
       ...(unavailable ? { unavailable: true as const } : {}),
       agents: users,

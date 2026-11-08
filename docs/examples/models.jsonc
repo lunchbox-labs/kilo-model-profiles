@@ -3,7 +3,12 @@
   // Used when no profile is picked, and for any ref a profile leaves out.
   "defaults": {
     "reasoning": { "model": "openai/gpt-6-astra", "variant": "high" },
-    "coding": { "model": "openai/gpt-5.6-sol", "variant": "medium" },
+    // Any model setting an OpenCode agent takes can go with the model.
+    "coding": {
+      "model": "openai/gpt-5.6-sol",
+      "variant": "medium",
+      "textVerbosity": "low",
+    },
     "support": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
     "system": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
   },
@@ -18,7 +23,8 @@
       "support": { "model": "anthropic/claude-haiku-5-5", "variant": "medium" },
     },
   },
-  // Built-in agents have no frontmatter of their own; give them refs here.
+  // Built-in agents have no frontmatter of their own; give them refs here,
+  // or set modelRef on their entry in opencode.jsonc.
   // Built-ins left out keep OpenCode's default model choice.
   "builtins": {
     "general": "coding",

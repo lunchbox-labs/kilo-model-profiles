@@ -77,18 +77,44 @@
             "$ref": "#/$defs/modelIdentifier"
           },
           {
+            "description": "A model and the settings OpenCode sends with it, as on an OpenCode agent entry. Any other key goes into options, as OpenCode does for an agent. Keys that configure the agent rather than its model are not allowed.",
             "type": "object",
-            "additionalProperties": false,
             "required": ["model"],
             "properties": {
               "model": {
                 "$ref": "#/$defs/modelIdentifier"
               },
               "variant": {
+                "description": "Model variant, as an agent's variant.",
                 "type": "string",
                 "minLength": 1
-              }
-            }
+              },
+              "temperature": {
+                "description": "Sampling temperature, as an agent's temperature.",
+                "type": "number"
+              },
+              "top_p": {
+                "description": "Top-p sampling, as an agent's top_p.",
+                "type": "number"
+              },
+              "options": {
+                "description": "Provider options sent with the model, merged over the agent's own options.",
+                "type": "object"
+              },
+              "name": false,
+              "prompt": false,
+              "description": false,
+              "mode": false,
+              "hidden": false,
+              "color": false,
+              "steps": false,
+              "maxSteps": false,
+              "permission": false,
+              "disable": false,
+              "tools": false,
+              "modelRef": false
+            },
+            "additionalProperties": true
           }
         ]
       }
