@@ -11,6 +11,7 @@ import {
   fallbackModel,
   knownAvailableModels,
   knownRefModels,
+  providerSetupKey,
   readConnectedProviders,
   recentModels,
   rememberAvailableModels,
@@ -20,6 +21,8 @@ import { isRecord } from "./models-file.ts";
 import { publishReport } from "./report.ts";
 import type { RefAssignment } from "./resolution.ts";
 import {
+  cacheDirectory,
+  dataDirectory,
   selectionFilePath,
   stateDirectory,
   worktreeRoot,
@@ -34,6 +37,8 @@ interface Applied {
   handSetModels: Record<string, string>;
   configuredModel?: string;
   configuredProviders: string[];
+  /** Which provider setup availability is saved under; unset when the config hook failed. */
+  providerSetup?: string;
 }
 
 const nothingApplied = (): Applied => ({
@@ -202,14 +207,18 @@ function createFallbacks(input: PluginInput, getApplied: () => Applied) {
     }
     const available = availableModels(connected);
     lastAvailable = available;
-    await rememberAvailableModels(
-      stateDirectory(),
-      directory,
-      available,
-      getApplied()
-        .assignments.filter((assignment) => assignment.applied)
-        .map((assignment) => assignment.model),
-    );
+    const { providerSetup } = getApplied();
+    if (providerSetup !== undefined) {
+      await rememberAvailableModels(
+        stateDirectory(),
+        directory,
+        providerSetup,
+        available,
+        getApplied()
+          .assignments.filter((assignment) => assignment.applied)
+          .map((assignment) => assignment.model),
+      );
+    }
     // Decided once the file is saved, so a reload never starts before the next process can read it. An idle session
     // reported meanwhile during the first check is kept until then.
     if (
@@ -473,9 +482,14 @@ const ModelProfilesServer: Plugin = (input, options) => {
       const target = config as Record<string, unknown>;
       const configFile = modelsFilePath(options);
       try {
+        const providerSetup = await providerSetupKey(target, process.env, {
+          data: dataDirectory(),
+          cache: cacheDirectory(),
+        });
         const available = await knownAvailableModels(
           stateDirectory(),
           input.directory,
+          providerSetup,
         );
         const resolved = await resolveModelProfiles(target, {
           configFile,
@@ -491,6 +505,7 @@ const ModelProfilesServer: Plugin = (input, options) => {
           configuredProviders: isRecord(target.provider)
             ? Object.keys(target.provider)
             : [],
+          providerSetup,
         };
         publishReport(target, options, resolved.report);
       } catch (error) {
