@@ -46,6 +46,7 @@ import {
   stateDirectory,
 } from "../src/selection.ts";
 import server from "../src/server.ts";
+import tui from "../src/tui.ts";
 
 const realisticModels = `{
   // Comments and trailing commas are allowed.
@@ -2061,4 +2062,323 @@ test("the dialog marks refs the server found unavailable, and the TUI does not w
     unavailableModelNotices(refs, [{ id: "openai", models: {} }]),
     [],
   );
+});
+
+const pendingPickWait = 800;
+const waitFor = (milliseconds: number) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function fakeTui(t: { after: (fn: () => void | Promise<void>) => void }) {
+  const root = await mkdtemp(join(tmpdir(), "model-profiles-tui-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const report = {
+    version: 1,
+    configFile: join(root, "models.jsonc"),
+    selectionFile: join(root, "selection.json"),
+    worktree: root,
+    profiles: ["fast"],
+    profile: null as string | null,
+    profileSource: "none",
+    refs: [],
+    notices: [],
+  };
+  const state = {
+    busy: false,
+    terminals: [] as unknown[],
+    disposals: 0,
+    toasts: [] as string[],
+    /** How many terminal lists were answered. */
+    terminalChecks: 0,
+    disposeFails: false,
+    terminalListFails: false,
+    /** Runs once, the next time the terminals are listed, while that list is still on its way. */
+    onTerminalList: undefined as (() => void) | undefined,
+  };
+  const handlers = new Map<string, ((event: unknown) => void)[]>();
+  const disposers: (() => void)[] = [];
+  let command: { run: () => void } | undefined;
+  let dialog: { onSelect: (option: { value: string }) => void } | undefined;
+  const api = {
+    state: {
+      provider: [{ id: "openai", models: {} }],
+      path: { directory: root, worktree: root },
+    },
+    client: {
+      config: {
+        get: () =>
+          Promise.resolve({
+            data: { plugin: [[packageName, { modelProfilesReport: report }]] },
+          }),
+      },
+      session: {
+        status: () =>
+          Promise.resolve({
+            data: { ses: { type: state.busy ? "busy" : "idle" } },
+          }),
+      },
+      pty: {
+        list: () => {
+          const terminals = [...state.terminals];
+          const fails = state.terminalListFails;
+          const listed = state.onTerminalList;
+          state.onTerminalList = undefined;
+          listed?.();
+          return new Promise((resolve) =>
+            setTimeout(() => {
+              state.terminalChecks += 1;
+              resolve(fails ? { error: "unavailable" } : { data: terminals });
+            }, 0),
+          );
+        },
+      },
+      instance: {
+        dispose: () => {
+          state.disposals += 1;
+          if (state.disposeFails) {
+            return Promise.resolve({ error: "refused" });
+          }
+          report.profile = "fast";
+          return Promise.resolve({ data: true });
+        },
+      },
+    },
+    keymap: {
+      registerLayer: (layer: { commands: { run: () => void }[] }) => {
+        command = layer.commands[0];
+        return () => undefined;
+      },
+    },
+    event: {
+      on: (type: string, handler: (event: unknown) => void) => {
+        handlers.set(type, [...(handlers.get(type) ?? []), handler]);
+        return () => undefined;
+      },
+    },
+    lifecycle: {
+      onDispose: (dispose: () => void) => {
+        disposers.push(dispose);
+        return () => undefined;
+      },
+    },
+    ui: {
+      toast: ({ message }: { message: string }) => state.toasts.push(message),
+      dialog: {
+        replace: (render: () => typeof dialog) => {
+          dialog = render();
+        },
+        clear: () => undefined,
+        setSize: () => undefined,
+      },
+      DialogSelect: (props: typeof dialog) => props,
+    },
+  };
+  await tui.tui(api as never, undefined, {} as never);
+  t.after(() => {
+    for (const dispose of disposers) {
+      dispose();
+    }
+  });
+  const emit = async (type: string, properties: unknown = {}) => {
+    for (const handler of handlers.get(type) ?? []) {
+      handler({ type, properties });
+    }
+    await settle();
+  };
+  const openDialog = () => dialog;
+  const pick = async (value: string) => {
+    dialog = undefined;
+    command?.run();
+    // The dialog opens once the models file and saved pick are read from disk.
+    await eventually(() => openDialog() !== undefined, "the dialog opens");
+    openDialog()?.onSelect({ value });
+    await settle();
+  };
+  return { root, report, state, emit, pick };
+}
+
+test("a profile picked while a terminal is open applies once the terminals close, without ending them", async (t) => {
+  const { state, emit, pick } = await fakeTui(t);
+  state.terminals = [{ id: "pty_dev_server" }];
+  await pick("profile:fast");
+  await eventually(
+    () => state.terminalChecks === 1,
+    "the pick checks the terminals",
+  );
+  assert.equal(state.disposals, 0, "a reload would end the open terminal");
+  assert.deepEqual(state.toasts.slice(-1), [
+    "Saved fast for this worktree. Reloading would end the open terminals, so it applies once they are all closed.",
+  ]);
+  await emit("pty.exited", { id: "pty_dev_server", exitCode: 0 });
+  await eventually(
+    () => state.terminalChecks === 2,
+    "an exited terminal checks the terminals again",
+  );
+  assert.equal(state.disposals, 0, "the terminal is still listed");
+
+  state.terminals = [];
+  await emit("pty.deleted", { id: "pty_dev_server" });
+  await eventually(
+    () => state.toasts.at(-1) === "Using fast.",
+    "closing the terminal applies the pick",
+  );
+  assert.equal(state.disposals, 1);
+  await emit("session.idle", { sessionID: "ses" });
+  await waitFor(pendingPickWait);
+  assert.equal(state.disposals, 1, "an applied pick does not reload again");
+});
+
+test("a profile picked while a session is busy applies when it goes idle, or with any other reload", async (t) => {
+  const { root, state, emit, pick } = await fakeTui(t);
+  state.busy = true;
+  await pick("profile:fast");
+  await eventually(
+    () => state.toasts.length === 1,
+    "the pick says it waits for the session",
+  );
+  assert.equal(state.disposals, 0);
+  state.busy = false;
+  await emit("session.status", {
+    sessionID: "ses",
+    status: { type: "idle" },
+  });
+  await eventually(
+    () => state.disposals === 1,
+    "the idle session applies the pick",
+  );
+
+  state.terminals = [{ id: "pty" }];
+  await pick("defaults");
+  await eventually(
+    () => state.terminalChecks === 2,
+    "the second pick checks the terminals",
+  );
+  await emit("server.instance.disposed", { directory: root });
+  await eventually(
+    () => state.toasts.at(-1) === "Using fast.",
+    "a reload from elsewhere applies the saved pick and says what is in use",
+  );
+  state.terminals = [];
+  await emit("pty.deleted", { id: "pty" });
+  await waitFor(pendingPickWait);
+  assert.equal(state.disposals, 1, "the pick no longer waits");
+});
+
+test("a pending pick leaves the reload to the server plugin when it reloads at the same moment", async (t) => {
+  const { root, report, state, emit, pick } = await fakeTui(t);
+  state.busy = true;
+  await pick("profile:fast");
+  await eventually(
+    () => state.toasts.length === 1,
+    "the pick says it waits for the session",
+  );
+  state.busy = false;
+  await emit("session.idle", { sessionID: "ses" });
+  report.profile = "fast";
+  await emit("server.instance.disposed", { directory: root });
+  await eventually(
+    () => state.toasts.at(-1) === "Using fast.",
+    "the server's reload applies the pick",
+  );
+  await waitFor(pendingPickWait);
+  assert.equal(state.disposals, 0, "the project reloads once, not twice");
+});
+
+test("a pending pick OpenCode refuses to reload for is not retried by the same idle moment", async (t) => {
+  const { state, emit, pick } = await fakeTui(t);
+  state.busy = true;
+  await pick("profile:fast");
+  await eventually(
+    () => state.toasts.length === 1,
+    "the pick says it waits for the session",
+  );
+  state.busy = false;
+  state.disposeFails = true;
+  await emit("session.status", {
+    sessionID: "ses",
+    status: { type: "idle" },
+  });
+  await emit("session.idle", { sessionID: "ses" });
+  await eventually(
+    () => state.disposals >= 1,
+    "the idle session applies the pick",
+  );
+  await waitFor(pendingPickWait);
+  assert.equal(state.disposals, 1);
+  assert.deepEqual(state.toasts.slice(-1), [
+    "Saved fast, but OpenCode did not reload. It applies on the next reload.",
+  ]);
+});
+
+test("a terminal list that fails holds a pick back with a warning, and a pending pick waits for the next event", async (t) => {
+  const { state, emit, pick } = await fakeTui(t);
+  state.terminalListFails = true;
+  await pick("profile:fast");
+  await eventually(
+    () => state.terminalChecks === 1,
+    "the pick checks the terminals",
+  );
+  assert.equal(state.disposals, 0);
+  assert.deepEqual(state.toasts.slice(-1), [
+    "Saved fast for this worktree, but OpenCode could not report whether a terminal is open, so it did not reload. It applies on the next reload.",
+  ]);
+
+  state.terminalListFails = false;
+  state.busy = true;
+  await pick("profile:fast");
+  await eventually(
+    () => state.toasts.length === 2,
+    "the pick says it waits for the session",
+  );
+  state.busy = false;
+  state.terminalListFails = true;
+  await emit("session.idle", { sessionID: "ses" });
+  await eventually(
+    () => state.terminalChecks === 2,
+    "the idle session checks the terminals",
+  );
+  assert.equal(state.disposals, 0, "the pick stays pending");
+  state.terminalListFails = false;
+  await emit("pty.deleted", { id: "pty" });
+  await eventually(
+    () => state.disposals === 1,
+    "the next event applies the pick",
+  );
+});
+
+test("a newer pick replaces a pending one, so the project reloads once", async (t) => {
+  const { state, emit, pick } = await fakeTui(t);
+  state.busy = true;
+  await pick("profile:fast");
+  await pick("defaults");
+  await eventually(
+    () => state.toasts.length === 2,
+    "both picks say they wait for the session",
+  );
+  state.busy = false;
+  await emit("session.idle", { sessionID: "ses" });
+  await eventually(() => state.disposals === 1, "the idle session applies it");
+  await emit("session.idle", { sessionID: "ses" });
+  await waitFor(pendingPickWait);
+  assert.equal(state.disposals, 1);
+});
+
+test("a terminal that closes while a pending pick is checking is not missed", async (t) => {
+  const { state, emit, pick } = await fakeTui(t);
+  state.terminals = [{ id: "second" }, { id: "first" }];
+  await pick("profile:fast");
+  await eventually(
+    () => state.terminalChecks === 1,
+    "the pick checks the terminals",
+  );
+  state.terminals = [{ id: "second" }];
+  state.onTerminalList = () => {
+    state.terminals = [];
+    emit("pty.deleted", { id: "second" }).catch(() => undefined);
+  };
+  await emit("pty.deleted", { id: "first" });
+  await eventually(
+    () => state.disposals === 1,
+    "the check runs again once the attempt that saw the second terminal ends",
+  );
+  assert.equal(state.terminalChecks, 3);
 });
