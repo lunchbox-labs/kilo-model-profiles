@@ -14,8 +14,7 @@ const availability = new Map<string, ReadonlySet<string>>();
 
 /**
  * Every model a ref has put on an agent, per directory, also saved. A session can keep asking for one after its ref
- * is fixed or left out, and only those are moved when OpenCode took the model from the agent or the session, so a
- * model the user set by hand still fails as OpenCode would.
+ * is fixed or left out, and only those are moved when OpenCode took the model from the agent or the session.
  */
 const refModels = new Map<string, ReadonlySet<string>>();
 
@@ -158,6 +157,21 @@ export function assignmentsAreStale(
   return assignments.some(
     (assignment) => assignment.applied !== available.has(assignment.model),
   );
+}
+
+/** Which way the applied refs went stale: refs applied to models now missing, or refs left out whose models are back. */
+export function staleDirections(
+  assignments: readonly RefAssignment[],
+  available: ReadonlySet<string>,
+): { nowUnavailable: boolean; availableAgain: boolean } {
+  return {
+    nowUnavailable: assignments.some(
+      (assignment) => assignment.applied && !available.has(assignment.model),
+    ),
+    availableAgain: assignments.some(
+      (assignment) => !assignment.applied && available.has(assignment.model),
+    ),
+  };
 }
 
 /** OpenCode's recently used models, which it tries before a provider's default when no `model` is set. */
