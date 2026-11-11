@@ -64,7 +64,7 @@ test(
         "--no-audit",
         "--no-fund",
         join(root, filename),
-        `@opencode-ai/plugin@${devDependencies["@opencode-ai/plugin"]}`,
+        `@kilocode/plugin@${devDependencies["@kilocode/plugin"]}`,
         `@types/node@${devDependencies["@types/node"]}`,
       ],
       { timeout: 120_000, signal: t.signal },
@@ -72,13 +72,13 @@ test(
     await writeFile(
       join(root, "consumer.mjs"),
       `import assert from 'node:assert/strict';
-import root from '@lunchbox-labs/opencode-model-profiles';
-import server from '@lunchbox-labs/opencode-model-profiles/server';
-import tui from '@lunchbox-labs/opencode-model-profiles/tui';
+import root from '@lunchbox-labs/kilo-model-profiles';
+import server from '@lunchbox-labs/kilo-model-profiles/server';
+import tui from '@lunchbox-labs/kilo-model-profiles/tui';
 import { createRequire } from 'node:module';
-const schema = createRequire(import.meta.url)('@lunchbox-labs/opencode-model-profiles/schema.json');
-assert.equal(schema.title, 'OpenCode Model Profiles');
-assert.deepEqual(Object.keys(schema.properties.builtins.properties).sort(), ['build', 'compaction', 'explore', 'general', 'plan', 'summary', 'title']);
+const schema = createRequire(import.meta.url)('@lunchbox-labs/kilo-model-profiles/schema.json');
+assert.equal(schema.title, 'Kilo Model Profiles');
+assert.deepEqual(Object.keys(schema.properties.builtins.properties).sort(), ['ask', 'build', 'code', 'compaction', 'debug', 'explore', 'general', 'orchestrator', 'plan', 'scout', 'summary', 'title']);
 assert.equal(root, server, 'the root export is the server entry');
 assert.equal(server.id, 'model-profiles');
 assert.equal(typeof server.server, 'function');
@@ -110,11 +110,11 @@ assert.deepEqual(commands.map((command) => command.slashName), ['model-config'])
     });
     await writeFile(
       join(root, "consumer.mts"),
-      `import type { PluginModule } from '@opencode-ai/plugin';
-import type { TuiPluginModule } from '@opencode-ai/plugin/tui';
-import root from '@lunchbox-labs/opencode-model-profiles';
-import server from '@lunchbox-labs/opencode-model-profiles/server';
-import tui from '@lunchbox-labs/opencode-model-profiles/tui';
+      `import type { PluginModule } from '@kilocode/plugin';
+import type { TuiPluginModule } from '@kilocode/plugin/tui';
+import root from '@lunchbox-labs/kilo-model-profiles';
+import server from '@lunchbox-labs/kilo-model-profiles/server';
+import tui from '@lunchbox-labs/kilo-model-profiles/tui';
 const rootModule: PluginModule = root;
 const serverModule: PluginModule = server;
 const tuiModule: TuiPluginModule = tui;
@@ -140,14 +140,14 @@ console.log(rootModule.id, serverModule.id, tuiModule.id);
       await readFile(
         join(
           root,
-          "node_modules/@lunchbox-labs/opencode-model-profiles/package.json",
+          "node_modules/@lunchbox-labs/kilo-model-profiles/package.json",
         ),
         "utf8",
       ),
     ) as Record<string, Record<string, string> | undefined>;
     assert.deepEqual(manifest.dependencies, dependencies);
     assert.deepEqual(Object.keys(dependencies), ["jsonc-parser"]);
-    assert.equal(Object.hasOwn(manifest.engines ?? {}, "opencode"), false);
+    assert.equal(Object.hasOwn(manifest.engines ?? {}, "kilo"), false);
     assert.equal(manifest.engines?.node, ">=22.18.0");
   },
 );

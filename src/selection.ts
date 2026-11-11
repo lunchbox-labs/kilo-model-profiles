@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { isRecord } from "./models-file.ts";
 
-export const processProfileVariable = "OPENCODE_MODEL_PROFILE";
+export const processProfileVariable = "KILO_MODEL_PROFILE";
 
 export function processProfile(
   environment: NodeJS.ProcessEnv = process.env,
@@ -16,56 +17,70 @@ export function processProfile(
 export function configurationDirectory(
   environment: NodeJS.ProcessEnv = process.env,
 ): string {
-  const configured = environment.OPENCODE_CONFIG_DIR;
+  const configured = environment.KILO_CONFIG_DIR;
   if (configured !== undefined && configured !== "") {
     return path.resolve(configured);
   }
-  const xdg = environment.XDG_CONFIG_HOME;
+  const xdg = environment.XDG_CONFIG_HOME?.replace(/[\r\n]+/g, "");
   return xdg !== undefined && path.isAbsolute(xdg)
-    ? path.join(xdg, "opencode")
-    : path.join(homedir(), ".config", "opencode");
+    ? path.join(xdg, "kilo")
+    : path.join(homedir().replace(/[\r\n]+/g, ""), ".config", "kilo");
 }
 
-/** OpenCode 1.19 uses xdg-basedir for its state directory on every platform, including Windows. */
-export function stateDirectory(
-  environment: NodeJS.ProcessEnv = process.env,
-): string {
-  const xdg = environment.XDG_STATE_HOME;
-  return path.join(
-    xdg !== undefined && path.isAbsolute(xdg)
-      ? xdg
-      : path.join(homedir(), ".local", "state"),
-    "opencode",
-  );
-}
-
-/** OpenCode keeps `auth.json` in its data directory, which also follows xdg-basedir on every platform. */
+/** Kilo keeps `auth.json` in its data directory, which also follows xdg-basedir on every platform. */
 export function dataDirectory(
   environment: NodeJS.ProcessEnv = process.env,
 ): string {
-  const xdg = environment.XDG_DATA_HOME;
+  const xdg = environment.XDG_DATA_HOME?.replace(/[\r\n]+/g, "");
   return path.join(
     xdg !== undefined && path.isAbsolute(xdg)
       ? xdg
-      : path.join(homedir(), ".local", "share"),
-    "opencode",
+      : path.join(homedir().replace(/[\r\n]+/g, ""), ".local", "share"),
+    "kilo",
   );
 }
 
-/** OpenCode keeps its copy of the models.dev catalog in its cache directory, which follows xdg-basedir too. */
+/** Kilo initializes its state directory before loading plugins, including a sticky data/state fallback. */
+export function stateDirectory(
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  const xdg = environment.XDG_STATE_HOME?.replace(/[\r\n]+/g, "");
+  if (
+    environment.XDG_STATE_HOME === undefined ||
+    environment.XDG_STATE_HOME === ""
+  ) {
+    const fallback = path.join(dataDirectory(environment), "state");
+    try {
+      if (statSync(fallback).isDirectory()) {
+        accessSync(fallback, constants.W_OK);
+        return fallback;
+      }
+    } catch {
+      // The host selected its preferred state directory instead.
+    }
+  }
+  return path.join(
+    xdg !== undefined && path.isAbsolute(xdg)
+      ? xdg
+      : path.join(homedir().replace(/[\r\n]+/g, ""), ".local", "state"),
+    "kilo",
+  );
+}
+
+/** Kilo keeps its copy of the models.dev catalog in its cache directory, which follows xdg-basedir too. */
 export function cacheDirectory(
   environment: NodeJS.ProcessEnv = process.env,
 ): string {
-  const xdg = environment.XDG_CACHE_HOME;
+  const xdg = environment.XDG_CACHE_HOME?.replace(/[\r\n]+/g, "");
   return path.join(
     xdg !== undefined && path.isAbsolute(xdg)
       ? xdg
-      : path.join(homedir(), ".cache"),
-    "opencode",
+      : path.join(homedir().replace(/[\r\n]+/g, ""), ".cache"),
+    "kilo",
   );
 }
 
-/** Outside a git repository OpenCode reports the worktree as "/", so the directory stands in for it. */
+/** Outside a git repository Kilo reports the worktree as "/", so the directory stands in for it. */
 export function worktreeRoot(worktree: unknown, directory: unknown): string {
   if (typeof worktree === "string" && worktree !== "" && worktree !== "/") {
     return worktree;

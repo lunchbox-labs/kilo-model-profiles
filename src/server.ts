@@ -1,4 +1,4 @@
-import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin";
+import type { Plugin, PluginInput, PluginModule } from "@kilocode/plugin";
 import {
   modelsFilePath,
   resolveModelProfiles,
@@ -69,14 +69,14 @@ function handSetModels(
 
 interface MessageInput {
   sessionID?: unknown;
-  /** Set when the caller chose the model; unset when OpenCode took it from the agent or the session. */
+  /** Set when the caller chose the model; unset when Kilo took it from the agent or the session. */
   model?: unknown;
 }
 
 /** Availability each directory was last reloaded for, so a reload that changes nothing is never repeated. */
 const reloadedFor = new Map<string, string>();
 
-/** Fallback toasts already shown, per directory, so each one appears once per OpenCode process. */
+/** Fallback toasts already shown, per directory, so each one appears once per Kilo process. */
 const toastedFallbacks = new Set<string>();
 
 /** Failed reloads before giving up, so a host that keeps refusing is not asked again on every event. */
@@ -88,20 +88,20 @@ function reloadNotices(
   outcome: "waitingForTerminals" | "gaveUp",
 ): string[] {
   const waiting = outcome === "waitingForTerminals";
-  const gaveUp = `OpenCode did not reload the project after ${reloadAttemptLimit} tries, so`;
+  const gaveUp = `Kilo did not reload the project after ${reloadAttemptLimit} tries, so`;
   return [
     ...(directions.nowUnavailable
       ? [
           waiting
             ? "Built-in agents such as compaction and title keep an unavailable ref's model until the project reloads, which waits for every terminal to close."
-            : `${gaveUp} built-in agents such as compaction and title keep an unavailable ref's model until OpenCode restarts.`,
+            : `${gaveUp} built-in agents such as compaction and title keep an unavailable ref's model until Kilo restarts.`,
         ]
       : []),
     ...(directions.availableAgain
       ? [
           waiting
             ? "Refs that are available again apply once the project reloads, which waits for every terminal to close."
-            : `${gaveUp} refs that are available again apply once OpenCode restarts.`,
+            : `${gaveUp} refs that are available again apply once Kilo restarts.`,
         ]
       : []),
   ];
@@ -133,7 +133,7 @@ function modelName(value: unknown): string | undefined {
   ) {
     return `${value.providerID}/${value.modelID}`;
   }
-  // OpenCode stores a session's model as { providerID, id }.
+  // Kilo stores a session's model as { providerID, id }.
   if (
     isRecord(value) &&
     typeof value.providerID === "string" &&
@@ -147,7 +147,7 @@ function modelName(value: unknown): string | undefined {
 /**
  * Keeps agents usable when a ref names a model no connected provider offers. The config hook runs before
  * providers load, so it cannot check models itself: it uses the availability saved by an earlier check, and until
- * there is one, a prompt to such a model is moved to the model OpenCode would use without the ref. When the
+ * there is one, a prompt to such a model is moved to the model Kilo would use without the ref. When the
  * applied refs no longer match what is available, the project reloads once nothing is running, so the config hook
  * leaves those refs unapplied (which also covers built-in agents such as compaction that never pass through a
  * prompt).
@@ -173,7 +173,7 @@ function createFallbacks(input: PluginInput, getApplied: () => Applied) {
       })
       .catch(() => undefined);
 
-  /** Toasts a fallback in any client that shows OpenCode's toasts, since a log line alone goes unseen, and logs it. */
+  /** Toasts a fallback in any client that shows Kilo's toasts, since a log line alone goes unseen, and logs it. */
   const reportFallback = async (message: string) => {
     const toastKey = `${directory}\n${message}`;
     if (toastedFallbacks.has(toastKey)) {
@@ -248,7 +248,7 @@ function createFallbacks(input: PluginInput, getApplied: () => Applied) {
       path: { id: parentID },
       query: { directory },
     });
-    // OpenCode 1.19 includes the session's model, which the SDK's type does not list yet.
+    // Kilo includes the session's model, which some SDK versions do not list yet.
     const data: unknown = parent.data;
     return isRecord(data) ? modelName(data.model) : undefined;
   };
@@ -305,9 +305,9 @@ function createFallbacks(input: PluginInput, getApplied: () => Applied) {
       return;
     }
     // A model the caller chose (as the task tool does for a subagent) is moved only when a ref put it there. One
-    // OpenCode took from the agent or the session is moved when a ref ever put it on an agent, because OpenCode
+    // Kilo took from the agent or the session is moved when a ref ever put it on an agent, because Kilo
     // stores a session's model before this hook runs, so a session keeps asking for it after the ref is fixed or
-    // left out. A model the agent, or the top-level config, sets by hand is left as OpenCode would use it.
+    // left out. A model the agent, or the top-level config, sets by hand is left as Kilo would use it.
     const assignment =
       ownAssignment ??
       applied.assignments.find((candidate) => candidate.model === requested);
@@ -358,7 +358,7 @@ function createFallbacks(input: PluginInput, getApplied: () => Applied) {
 
   /**
    * Reloads only while no session is busy and no terminal is open, since a reload ends running terminals. Resolves
-   * true once it has asked OpenCode to reload, whether or not OpenCode did.
+   * true once it has asked Kilo to reload, whether or not Kilo did.
    */
   const reloadWhenIdle = async () => {
     const status = await client.session.status({ query: { directory } });
@@ -522,11 +522,11 @@ const ModelProfilesServer: Plugin = (input, options) => {
             profileSource: "none",
             refs: [],
             notices: [
-              `Model refs were not applied (${error instanceof Error ? error.message : String(error)}); agents keep OpenCode's models.`,
+              `Model refs were not applied (${error instanceof Error ? error.message : String(error)}); agents keep Kilo's models.`,
             ],
           });
         } catch {
-          // A failing config hook must never stop OpenCode; agents then keep OpenCode's models.
+          // A failing config hook must never stop Kilo; agents then keep Kilo's models.
         }
       }
     },
@@ -534,7 +534,7 @@ const ModelProfilesServer: Plugin = (input, options) => {
       try {
         await fallbacks.message(hookInput, output.message);
       } catch {
-        // A failed check leaves the prompt as OpenCode built it.
+        // A failed check leaves the prompt as Kilo built it.
       }
     },
     "chat.params": (hookInput, output) => {
@@ -546,7 +546,7 @@ const ModelProfilesServer: Plugin = (input, options) => {
           output,
         );
       } catch {
-        // The request keeps the settings OpenCode built.
+        // The request keeps the settings Kilo built.
       }
       return Promise.resolve();
     },
@@ -557,7 +557,7 @@ const ModelProfilesServer: Plugin = (input, options) => {
           fallbacks.forget(event.properties.info.id);
         }
       } catch {
-        // Fallback checks never stop OpenCode's events.
+        // Fallback checks never stop Kilo's events.
       }
       return Promise.resolve();
     },

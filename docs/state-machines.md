@@ -2,7 +2,7 @@
 
 This document describes the state Model Profiles keeps across hooks, events and reloads. Update it in the same PR as any change to these states, their triggers or their exits, following the [state machine conventions](https://github.com/lunchbox-labs/.github/blob/main/agent-guidance/state-machines.md), and cover each transition you add or change in `tests/`. Known bugs belong in issues, not here.
 
-The server plugin's factory runs once per instance load, so closure state is rebuilt on every reload. Module-level state and files in the state directory survive reloads; files are also shared with other OpenCode processes.
+The server plugin's factory runs once per instance load, so closure state is rebuilt on every reload. Module-level state and files in the state directory survive reloads; files are also shared with other Kilo processes.
 
 ## Fallback and reload controller
 
@@ -15,7 +15,7 @@ The server plugin in `src/server.ts` keeps `applied`, what its config hook appli
 - `reloadWanted`: the applied refs no longer match availability.
 - `reloading`: a reload attempt is in flight.
 - `reloadRequestedWhileReloading`: a reload trigger arrived during the attempt in flight.
-- `failedReloads`: disposes OpenCode refused in this instance; at three (`reloadAttemptLimit`) the instance stops asking.
+- `failedReloads`: disposes Kilo refused in this instance; at three (`reloadAttemptLimit`) the instance stops asking.
 - `sessionModels`: each session's model after the hook, for subagent fallback; entries are removed on `session.deleted`.
 
 The module-level `reloadedFor` map (directory to availability key) records the availability of the last successful reload per directory, so the same availability never triggers a second reload in one process. The module-level `toastedFallbacks` set (directory and message) records the fallback and reload toasts already shown, so each appears once per process. The closure state resets on each instance load; `reloadedFor` and `toastedFallbacks` last until the process exits.
@@ -26,8 +26,8 @@ Transitions:
 - The first event of any type sets `checkedOnce` and `firstCheckPending` and schedules `check()`. Every `chat.message` also runs `check()` through `checkMessage`, so the two can run at the same time.
 - `check()` reads `config.providers`, saves availability for `providerSetup` (nothing is saved when the config hook failed and left it unset) and then sets `reloadWanted` when fewer than three disposes were refused, `assignmentsAreStale` reports a mismatch and `reloadedFor` does not already hold the current availability key. A provider error returns early and changes nothing. `check()` never clears `reloadWanted`.
 - A reload trigger is `session.idle`, `session.status` with an idle status, `pty.exited` or `pty.deleted`. It calls `scheduleReload`, which does nothing unless `reloadWanted` is set. A trigger that arrives while the first check is pending and `reloadWanted` is unset sets `reloadRequestedDuringFirstCheck`, and the first check calls `scheduleReload` once it settles.
-- A trigger during an attempt in flight sets `reloadRequestedWhileReloading`. When the attempt ends, it runs once more only if the attempt stopped before asking OpenCode to dispose, so one idle moment reported as both `session.status` and `session.idle` uses one try.
-- `reloadWhenIdle` gives up for this attempt, leaving `reloadWanted` set, if `session.status` or `pty.list` errors, a session is not idle or a terminal is open. An open terminal also shows a warning toast, worded by whether refs became unavailable or available again. Otherwise it disposes the instance; on success it clears `reloadWanted` and records `reloadedFor`. A dispose error counts in `failedReloads` and leaves `reloadWanted` set; the third clears it and shows a warning toast that the change applies once OpenCode restarts, and `check()` no longer sets it in this instance.
+- A trigger during an attempt in flight sets `reloadRequestedWhileReloading`. When the attempt ends, it runs once more only if the attempt stopped before asking Kilo to dispose, so one idle moment reported as both `session.status` and `session.idle` uses one try.
+- `reloadWhenIdle` gives up for this attempt, leaving `reloadWanted` set, if `session.status` or `pty.list` errors, a session is not idle or a terminal is open. An open terminal also shows a warning toast, worded by whether refs became unavailable or available again. Otherwise it disposes the instance; on success it clears `reloadWanted` and records `reloadedFor`. A dispose error counts in `failedReloads` and leaves `reloadWanted` set; the third clears it and shows a warning toast that the change applies once Kilo restarts, and `check()` no longer sets it in this instance.
 - A successful dispose ends this closure. The host builds a new instance, whose config hook reads the saved availability.
 
 ```mermaid
@@ -57,7 +57,7 @@ stateDiagram-v2
 
 `src/fallback.ts` keeps availability in memory (`availability`, keyed by directory and provider setup) and in `<state>/model-profiles/available/<hash of directory>-<provider setup>.json`, one file for each provider setup a directory was checked with.
 
-The provider setup key comes from `providerSetupKey`, which the config hook runs on each load. It is a short hash of the `provider` config (ids, listed models, `whitelist` and `blacklist`), `enabled_providers` and `disabled_providers`, the provider ids in OpenCode's `<XDG_DATA_HOME or ~/.local/share>/opencode/auth.json`, never the credentials under them, and the names of the set, non-empty environment variables providers connect with. Those names are the `env` lists in OpenCode's cached models.dev catalog (`<XDG_CACHE_HOME or ~/.cache>/opencode/models.json`, or `OPENCODE_MODELS_PATH`), plus the variables OpenCode's own provider loaders read (`loaderVariables`). Without a readable catalog, names that match `credentialLikeVariable` count instead. `OPENCODE_MODEL_PROFILE` never counts. A missing or unreadable `auth.json` counts as no providers. The key changes when any of these do, including once when the catalog is first cached, and that setup then starts from Unknown.
+The provider setup key comes from `providerSetupKey`, which the config hook runs on each load. It is a short hash of the `provider` config (ids, listed models, `whitelist` and `blacklist`), `enabled_providers` and `disabled_providers`, the provider ids in Kilo's `<XDG_DATA_HOME or ~/.local/share>/kilo/auth.json`, never the credentials under them, and the names of the set, non-empty environment variables providers connect with. Those names are the `env` lists in Kilo's cached models.dev catalog (`<XDG_CACHE_HOME or ~/.cache>/kilo/models.json`, or `KILO_MODELS_PATH`), plus the variables Kilo's own provider loaders read (`loaderVariables`). Without a readable catalog, names that match `credentialLikeVariable` count instead. `KILO_MODEL_PROFILE` never counts. A missing or unreadable `auth.json` counts as no providers. The key changes when any of these do, including once when the catalog is first cached, and that setup then starts from Unknown.
 
 - `knownAvailableModels` reads memory for the current setup first. When memory is empty, the config hook loads a valid file for that setup into memory and refreshes the file's modification time, else it returns unknown, in which case every ref is applied. A file from another setup is never read.
 - `rememberAvailableModels` runs on every successful check for which the config hook set a provider setup, and always replaces memory. It writes the file through a temporary file and rename when memory was empty, the availability key changed or the ref-model set grew. Before writing it merges the ref models already in the file. After writing it deletes the pre-0.1.3 `<hash of directory>.json`, whose ref models it has merged and whose models it ignores, and prunes the directory's other setup files to the seven most recently written or loaded, so eight remain with the current one. Write, delete and prune errors are ignored. Pruning removes only files; a process that already holds the setup in memory keeps it and writes the file again on its next change.
@@ -77,11 +77,11 @@ The pre-0.1.3 file is a separate, one-way machine: it is read for its ref models
 
 ## Ref-model registry
 
-`refModels` in `src/fallback.ts` holds every model an applied ref put on an agent. Each successful check adds the models of the current applied assignments, and it is saved with availability. Loading a setup's file adds that file's ref models, and the first write after an upgrade adds the pre-0.1.3 file's. In memory it only grows. A write merges the ref models already in the file, so a file only loses them when it is pruned. `checkMessage` reroutes a prompt off a model in this set when the model is unavailable and OpenCode took it from the agent or session, except when the agent has no applied ref and the model is the one it sets by hand (`handSetModels`, else the top-level `model`) and none of its refs names it, which is left as OpenCode would use it.
+`refModels` in `src/fallback.ts` holds every model an applied ref put on an agent. Each successful check adds the models of the current applied assignments, and it is saved with availability. Loading a setup's file adds that file's ref models, and the first write after an upgrade adds the pre-0.1.3 file's. In memory it only grows. A write merges the ref models already in the file, so a file only loses them when it is pruned. `checkMessage` reroutes a prompt off a model in this set when the model is unavailable and Kilo took it from the agent or session, except when the agent has no applied ref and the model is the one it sets by hand (`handSetModels`, else the top-level `model`) and none of its refs names it, which is left as Kilo would use it.
 
 ## Fallback toasts
 
-`reportFallback` in `src/server.ts` toasts a message through `client.tui.showToast` and logs it as a warning, once per process for each directory and message, using `toastedFallbacks`. A rejected toast or log call is ignored, so it never fails a prompt or a reload attempt, and the message is not toasted again: the log line still records it if the toast fails, and if both fail, nothing does. This is an exception to retrying a cached failure: `showToast` only posts to OpenCode's event bus, so a resolved call doesn't prove the toast was seen, and a rejection can arrive after the toast was delivered, so retrying risks the duplicate that `toastedFallbacks` exists to prevent. It runs when `checkMessage` moves a prompt to a fallback model, when a prompt runs on another model because its agent's ref was left out as unavailable, and for the reload controller's waiting and give-up notices.
+`reportFallback` in `src/server.ts` toasts a message through `client.tui.showToast` and logs it as a warning, once per process for each directory and message, using `toastedFallbacks`. A rejected toast or log call is ignored, so it never fails a prompt or a reload attempt, and the message is not toasted again: the log line still records it if the toast fails, and if both fail, nothing does. This is an exception to retrying a cached failure: `showToast` only posts to Kilo's event bus, so a resolved call doesn't prove the toast was seen, and a rejection can arrive after the toast was delivered, so retrying risks the duplicate that `toastedFallbacks` exists to prevent. It runs when `checkMessage` moves a prompt to a fallback model, when a prompt runs on another model because its agent's ref was left out as unavailable, and for the reload controller's waiting and give-up notices.
 
 ```mermaid
 stateDiagram-v2
@@ -93,7 +93,7 @@ stateDiagram-v2
 
 ## Profile selection
 
-On every config hook, `resolveModelProfiles` in `src/apply.ts` reads `OPENCODE_MODEL_PROFILE` through `processProfile` and the saved selection through `readSavedSelection`, and `selectProfile` in `src/resolution.ts` picks the variable, then the saved selection, then `defaultProfile`, else no profile (defaults only). Unknown profiles are skipped with a notice. Each ref then resolves from the selected profile, then the defaults.
+On every config hook, `resolveModelProfiles` in `src/apply.ts` reads `KILO_MODEL_PROFILE` through `processProfile` and the saved selection through `readSavedSelection`, and `selectProfile` in `src/resolution.ts` picks the variable, then the saved selection, then `defaultProfile`, else no profile (defaults only). Unknown profiles are skipped with a notice. Each ref then resolves from the selected profile, then the defaults.
 
 The saved selection is `<state>/model-profiles/worktrees/<hash of worktree>.json`. Only the TUI writes it: `saveSelection` through a temporary file and rename, and `clearSelection` for "Follow defaultProfile", which the dialog offers only when `defaultProfile` is set and a choice is saved. The server config hook and the TUI dialog read it. Reading an invalid or unreadable file adds a notice. A saved choice stays pending until the next instance load, whichever reload causes it.
 
@@ -135,7 +135,7 @@ stateDiagram-v2
 
 In `src/tui.ts`, a notice row toasts its full text and keeps the dialog open, and a ref row does nothing. A profile, Defaults only or Follow defaultProfile row closes the dialog and runs `choose`:
 
-- `choose` saves or clears the selection, toasting and stopping on an error. With `OPENCODE_MODEL_PROFILE` set it toasts that the variable still applies to this process and stops. Otherwise it calls `reload`, and toasts that the choice applies on the next reload if `reload` throws.
+- `choose` saves or clears the selection, toasting and stopping on an error. With `KILO_MODEL_PROFILE` set it toasts that the variable still applies to this process and stops. Otherwise it calls `reload`, and toasts that the choice applies on the next reload if `reload` throws.
 - `reload` clears any pending pick, so the newest pick wins, and asks `reloadBlocker`, which reads `session.status` and then `pty.list`. A status or terminal-list error toasts a warning that the choice applies on the next reload, and stops. A busy session or an open terminal makes the pick pending, with an info toast that says what it waits for. Otherwise `disposeFor` increments `reloadsInFlight`, disposes the instance and decrements it. On a dispose error it toasts a warning that the choice applies on the next reload. After a successful dispose it reads the report again and toasts the profile in use with any new notices, or "Saved" when no report comes back.
 
 ```mermaid
@@ -146,8 +146,8 @@ stateDiagram-v2
     Open --> Open: notice row toasts, ref row does nothing
     Open --> Closed: dismissed
     Open --> Saving: profile, Defaults only or Follow defaultProfile
-    Saving --> Closed: save error or OPENCODE_MODEL_PROFILE set, toast
-    Saving --> BlockerCheck: saved, OPENCODE_MODEL_PROFILE unset
+    Saving --> Closed: save error or KILO_MODEL_PROFILE set, toast
+    Saving --> BlockerCheck: saved, KILO_MODEL_PROFILE unset
     BlockerCheck --> Closed: status or terminal-list error, toast
     BlockerCheck --> Pending: busy session or open terminal, toast
     BlockerCheck --> Disposing: all sessions idle and no terminal open
@@ -187,3 +187,9 @@ stateDiagram-v2
 - The server `event` hook is synchronous. The first check and every reload attempt are deferred with `setTimeout(0)`, so they run after the event that triggered them, and each ends in `.catch` or a rejection handler. Attempts never overlap; a trigger during one is folded into at most one rerun.
 - The first-event check and a `chat.message` check can overlap; whichever finishes last sets memory and `lastAvailable`, so the order matters only if the two provider lists differ.
 - `chat.message` swallows any throw from `check()` and `parentModel()`, so no hook or event can fail the host.
+
+## Host path ownership
+
+Persisted selection and availability files belong to Kilo, never OpenCode. Kilo initializes its state path before plugins load. When `XDG_STATE_HOME` is unset and Kilo's writable data-directory `state` fallback exists, both server and picker use that sticky fallback. An explicit `XDG_STATE_HOME` uses the normal XDG state path. A process restart re-evaluates this host choice; selecting a profile never moves or imports another host's files.
+
+Kilo's provider setup fingerprint includes its effective organization selector, following environment, stored OAuth account and provider configuration precedence. Different organizations do not reuse each other's availability. Loader-only environment variables remain part of the fingerprint even when the core models.dev catalog omits Kilo's injected providers. Credential values are never hashed or saved, and organization IDs are used only inside the fingerprint, not written into availability files.

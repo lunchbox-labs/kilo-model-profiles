@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { isRecord } from "./models-file.ts";
 import type { ProfileSource, RefResolution } from "./resolution.ts";
 
-export const packageName = "@lunchbox-labs/opencode-model-profiles";
+export const packageName = "@lunchbox-labs/kilo-model-profiles";
 const reportKey = "modelProfilesReport";
 
 /** What the server applied, published in its own plugin entry so the TUI can read it through /config. */

@@ -5,9 +5,9 @@ For contributors and maintainers working on Model Profiles:
 - [Local builds and checks](#build-a-local-package): local builds, the server and TUI plugins and compatibility checks.
 - [Publishing](Publishing): trusted publisher setup and the release workflow.
 
-The plugin's state machines are documented in [docs/state-machines.md](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/docs/state-machines.md). These wiki pages are published from [docs/wiki](https://github.com/lunchbox-labs/opencode-model-profiles/tree/main/docs/wiki) on every push to `main` that changes them; change them there.
+The plugin's state machines are documented in [docs/state-machines.md](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/docs/state-machines.md). These wiki pages are published from [docs/wiki](https://github.com/lunchbox-labs/kilo-model-profiles/tree/main/docs/wiki) on every push to `main` that changes them; change them there.
 
-The repository's [AGENTS.md](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/AGENTS.md) and linked shared standards remain the authoritative machine instructions. [User documentation](Home#user-documentation) covers installation and everyday use.
+The repository's [AGENTS.md](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/AGENTS.md) and linked shared standards remain the authoritative machine instructions. [User documentation](Home#user-documentation) covers installation and everyday use.
 
 ## Build a local package
 
@@ -19,11 +19,11 @@ npm run build
 npm pack
 ```
 
-Install the generated tarball into a separate directory and register that installed package's absolute directory in both `opencode.jsonc` and `tui.jsonc`. OpenCode selects the corresponding server or TUI export. This exercises a local candidate without publishing it.
+Install the generated tarball into a separate directory and register that installed package's absolute directory in both `kilo.jsonc` and `tui.jsonc`. Kilo selects the corresponding server or TUI export. This exercises a local candidate without publishing it.
 
 ## Package shape
 
-The package has a server plugin (the root and `./server` exports) that resolves each agent's `modelRef` in the `config` hook and handles fallbacks, and a TUI plugin (`./tui`) for `/model-config` and fallback toasts. The server publishes what it applied in its own `plugin` entry's options, which the TUI reads. [AGENTS.md](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/AGENTS.md) describes the contracts these hooks keep. [schema.json](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/schema.json) ships in the package for editor validation of `models.jsonc`.
+The package has a server plugin (the root and `./server` exports) that resolves each agent's `modelRef` in the `config` hook and handles fallbacks, and a TUI plugin (`./tui`) for `/model-config` and fallback toasts. The server publishes what it applied in its own `plugin` entry's options, which the TUI reads. [AGENTS.md](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/AGENTS.md) describes the contracts these hooks keep. [schema.json](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/schema.json) ships in the package for editor validation of `models.jsonc`.
 
 ## Checks
 
@@ -36,6 +36,6 @@ Tests should protect observable behavior, safety boundaries and host contracts. 
 
 ## Host compatibility
 
-The supported OpenCode range and floor live in [tests/opencode.json](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/tests/opencode.json). The `@opencode-ai/plugin` and `@opencode-ai/sdk` dev dependencies share one exact version inside that range. The `@opentui/*` and `solid-js` dev dependencies stay on the versions the supported host bundles, because OpenCode maps a plugin's imports of them to its own copies. [tests/opencode-baseline.test.mjs](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/tests/opencode-baseline.test.mjs) enforces both, so update them only together with the supported range. The built-in agent names in `src/models-file.ts` and `schema.json` also follow the supported host. No OpenCode runtime engine restriction is declared.
+The supported Kilo range and floor live in [tests/kilo.json](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/tests/kilo.json). The `@kilocode/plugin` and `@kilocode/sdk` dev dependencies share one exact version inside that range. The `@opentui/*` and `solid-js` dev dependencies stay on the versions the supported host bundles, because Kilo maps a plugin's imports of them to its own copies. [tests/kilo-baseline.test.mjs](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/tests/kilo-baseline.test.mjs) enforces both, so update them only together with the supported range. The built-in agent names in `src/models-file.ts` and `schema.json` also follow the supported host. No Kilo runtime engine restriction is declared.
 
-[Check CI](https://github.com/lunchbox-labs/opencode-model-profiles/blob/main/.github/workflows/check.yml) runs the unit and package tests on Linux and Windows for every pull request and push to `main`, and the static checks on Linux.
+[Check CI](https://github.com/lunchbox-labs/kilo-model-profiles/blob/main/.github/workflows/check.yml) runs the unit and package tests on Linux and Windows for every pull request and push to `main`, and the static checks on Linux.

@@ -2,7 +2,7 @@ import type {
   TuiPlugin,
   TuiPluginApi,
   TuiPluginModule,
-} from "@opencode-ai/plugin/tui";
+} from "@kilocode/plugin/tui";
 import {
   type ModelConfigChoice,
   fallbackToastLines,
@@ -123,7 +123,7 @@ function registerModelConfig(api: TuiPluginApi): void {
       });
     if (disposed.error !== undefined) {
       toast("warning", [
-        `Saved ${label}, but OpenCode did not reload. It applies on the next reload.`,
+        `Saved ${label}, but Kilo did not reload. It applies on the next reload.`,
       ]);
       return;
     }
@@ -136,12 +136,12 @@ function registerModelConfig(api: TuiPluginApi): void {
     switch (blocker) {
       case "unknownSessions":
         toast("warning", [
-          `Saved ${label} for this worktree, but OpenCode could not report whether a session is busy, so it did not reload. It applies on the next reload.`,
+          `Saved ${label} for this worktree, but Kilo could not report whether a session is busy, so it did not reload. It applies on the next reload.`,
         ]);
         return;
       case "unknownTerminals":
         toast("warning", [
-          `Saved ${label} for this worktree, but OpenCode could not report whether a terminal is open, so it did not reload. It applies on the next reload.`,
+          `Saved ${label} for this worktree, but Kilo could not report whether a terminal is open, so it did not reload. It applies on the next reload.`,
         ]);
         return;
       case "busy":
@@ -217,7 +217,7 @@ function registerModelConfig(api: TuiPluginApi): void {
     }
     if (report.environmentProfile !== undefined) {
       toast("info", [
-        `Saved ${label} for this worktree. ${processProfileVariable}=${report.environmentProfile} still applies to this OpenCode process.`,
+        `Saved ${label} for this worktree. ${processProfileVariable}=${report.environmentProfile} still applies to this Kilo process.`,
       ]);
       return;
     }
@@ -225,7 +225,7 @@ function registerModelConfig(api: TuiPluginApi): void {
       await reload(label);
     } catch (error) {
       toast("warning", [
-        `Saved ${label}, but could not reload OpenCode (${errorText(error)}). It applies on the next reload.`,
+        `Saved ${label}, but could not reload Kilo (${errorText(error)}). It applies on the next reload.`,
       ]);
     }
   };
@@ -234,7 +234,7 @@ function registerModelConfig(api: TuiPluginApi): void {
     const applied = await readApplied().catch(() => undefined);
     if (applied === undefined) {
       toast("warning", [
-        "The server plugin has not reported model refs. Add @lunchbox-labs/opencode-model-profiles to plugin in opencode.jsonc.",
+        "The server plugin has not reported model refs. Add @lunchbox-labs/kilo-model-profiles to plugin in kilo.jsonc.",
       ]);
       return;
     }
