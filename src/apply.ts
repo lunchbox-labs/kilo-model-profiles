@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import path from "node:path";
 import {
   type LoadedModels,
@@ -24,9 +25,20 @@ export function modelsFilePath(
 ): string {
   const directory = configurationDirectory(environment);
   const configured = isRecord(options) ? options.configFile : undefined;
-  return typeof configured === "string" && configured.trim() !== ""
-    ? path.resolve(directory, configured)
-    : path.join(directory, "models.jsonc");
+  if (typeof configured !== "string" || configured.trim() === "") {
+    return path.join(directory, "models.jsonc");
+  }
+  if (
+    configured === "~" ||
+    configured.startsWith("~/") ||
+    configured.startsWith("~\\")
+  ) {
+    return path.resolve(
+      (environment.KILO_TEST_HOME ?? homedir()).trim(),
+      configured.slice(2),
+    );
+  }
+  return path.resolve(directory, configured);
 }
 
 function usesModelRefs(agents: unknown): boolean {
@@ -69,7 +81,7 @@ export async function resolveModelProfiles(
   const notices = [...loaded.notices];
   if (loaded.status === "missing" && usesModelRefs(config.agent)) {
     notices.push(
-      `No models file at ${input.configFile}; agents with a modelRef keep OpenCode's model.`,
+      `No models file at ${input.configFile}; agents with a modelRef keep Kilo's model.`,
     );
   }
   const environmentProfile = processProfile(environment);
@@ -87,6 +99,7 @@ export async function resolveModelProfiles(
     loaded.document,
     selection.profile,
     input.availableModels,
+    environment,
   );
   if (loaded.status === "loaded") {
     notices.push(...selection.notices, ...applied.notices);
@@ -109,7 +122,7 @@ export async function resolveModelProfiles(
   return { report, assignments: applied.assignments };
 }
 
-/** The last resort when resolution fails unexpectedly: OpenCode's models stay, and modelRef never reaches a provider. */
+/** The last resort when resolution fails unexpectedly: Kilo's models stay, and modelRef never reaches a provider. */
 export function stripModelRefs(config: Record<string, unknown>): void {
   if (!isRecord(config.agent)) {
     return;

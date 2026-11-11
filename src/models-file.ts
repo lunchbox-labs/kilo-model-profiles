@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 import { type ParseError, parse, printParseErrorCode } from "jsonc-parser";
 
 export const builtInAgentNames = [
+  "code",
   "build",
+  "debug",
+  "ask",
+  "orchestrator",
+  "scout",
   "plan",
   "general",
   "explore",
@@ -11,19 +16,19 @@ export const builtInAgentNames = [
   "summary",
 ] as const;
 
-/** A ref's model and the settings OpenCode sends with it, in the shape of an OpenCode agent entry. */
+/** A ref's model and the settings Kilo sends with it, in the shape of a Kilo agent entry. */
 export interface ModelChoice {
   model: string;
   variant?: string;
   temperature?: number;
   top_p?: number;
-  /** Provider options, including any key OpenCode would move into an agent's `options`. */
+  /** Provider options, including any key Kilo would move into an agent's `options`. */
   options?: Record<string, unknown>;
 }
 
 /**
- * Keys that configure an agent rather than its model: OpenCode's own agent keys, and this plugin's `modelRef`. Any
- * other key a ref sets that is not a model setting goes into its `options`, as OpenCode does for an agent entry.
+ * Keys that configure an agent rather than its model: Kilo's own agent keys, and this plugin's `modelRef`. Any
+ * other key a ref sets that is not a model setting goes into its `options`, as Kilo does for an agent entry.
  */
 export const agentOnlyKeys: ReadonlySet<string> = new Set([
   "name",
@@ -92,7 +97,7 @@ function readModelChoice(
   }
   const choice: ModelChoice = { model: value.model };
   const options: Record<string, unknown> = {};
-  // OpenCode moves every key it does not know on an agent into its options, over the agent's own options.
+  // Kilo moves every key it does not know on an agent into its options, over the agent's own options.
   const loose: Record<string, unknown> = {};
   const skip = (key: string, reason: string) =>
     notices.push(`${location}.${key} ${reason}; it is left out.`);
@@ -233,7 +238,9 @@ export function parseModelsDocument(text: string, path: string): LoadedModels {
       } else if (!isNonEmptyName(ref)) {
         notices.push(`builtins.${agent} is not a ref name; skipped.`);
       } else {
-        document.builtins[agent] = ref;
+        if (agent !== "build" || !Object.hasOwn(value.builtins ?? {}, "code")) {
+          document.builtins[agent === "build" ? "code" : agent] = ref;
+        }
       }
     }
   }

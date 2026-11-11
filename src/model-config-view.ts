@@ -1,4 +1,4 @@
-import type { TuiDialogSelectOption } from "@opencode-ai/plugin/tui";
+import type { TuiDialogSelectOption } from "@kilocode/plugin/tui";
 import type { ModelProfilesReport } from "./report.ts";
 import { type ProfileSource, unavailableModelNotice } from "./resolution.ts";
 import { type SavedProfile, processProfileVariable } from "./selection.ts";
@@ -11,7 +11,7 @@ type RefResolution = ModelProfilesReport["refs"][number];
 
 function modelLabel(ref: RefResolution): string {
   if (ref.model === undefined) {
-    return "not defined, OpenCode's model";
+    return "not defined, Kilo's model";
   }
   const settings = Array.isArray(ref.settings) ? ref.settings : [];
   const details = [
@@ -21,7 +21,7 @@ function modelLabel(ref: RefResolution): string {
   const model =
     details.length === 0 ? ref.model : `${ref.model} (${details.join("; ")})`;
   return ref.unavailable === true
-    ? `${model}, unavailable, OpenCode's model`
+    ? `${model}, unavailable, Kilo's model`
     : model;
 }
 

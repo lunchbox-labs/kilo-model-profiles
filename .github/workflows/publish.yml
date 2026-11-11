@@ -9,14 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: lunchbox-labs-opencode-model-profiles-publish
+  group: lunchbox-labs-kilo-model-profiles-publish
   cancel-in-progress: false
 
 jobs:
   version:
     name: Release version
     if: >-
-      github.repository == 'lunchbox-labs/opencode-model-profiles' &&
+      github.repository == 'lunchbox-labs/kilo-model-profiles' &&
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -59,7 +59,7 @@ jobs:
   checks:
     name: Release commit checks
     if: >-
-      github.repository == 'lunchbox-labs/opencode-model-profiles' &&
+      github.repository == 'lunchbox-labs/kilo-model-profiles' &&
       github.event_name == 'workflow_dispatch'
     # Runs after Verify, so a refused version ends the run without waiting
     # for the Check run.
@@ -91,7 +91,7 @@ jobs:
     name: Verify
     needs: [version]
     if: >-
-      github.repository == 'lunchbox-labs/opencode-model-profiles' &&
+      github.repository == 'lunchbox-labs/kilo-model-profiles' &&
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -157,7 +157,7 @@ jobs:
       - name: Upload verified package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: lunchbox-labs-opencode-model-profiles-release
+          name: lunchbox-labs-kilo-model-profiles-release
           path: release/
           if-no-files-found: error
           retention-days: 3
@@ -175,7 +175,7 @@ jobs:
       - name: Download verified package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: lunchbox-labs-opencode-model-profiles-release
+          name: lunchbox-labs-kilo-model-profiles-release
           path: release
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -226,7 +226,7 @@ jobs:
       - name: Download verified package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: lunchbox-labs-opencode-model-profiles-release
+          name: lunchbox-labs-kilo-model-profiles-release
           path: release
       # Only maintainers may create v* tags, so the draft names the tag and the
       # release commit, and GitHub creates the tag on that commit when a

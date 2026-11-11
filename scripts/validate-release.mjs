@@ -7,9 +7,9 @@ export function validateRelease(manifest, tag, lock) {
       "Private packages cannot be published; remove the private flag from package.json.",
     );
   }
-  if (manifest.name !== "@lunchbox-labs/opencode-model-profiles") {
+  if (manifest.name !== "@lunchbox-labs/kilo-model-profiles") {
     throw new Error(
-      "The npm package name must be @lunchbox-labs/opencode-model-profiles.",
+      "The npm package name must be @lunchbox-labs/kilo-model-profiles.",
     );
   }
   if (
@@ -39,7 +39,7 @@ export function validateRelease(manifest, tag, lock) {
   }
   if (
     manifest.repository?.url !==
-    "git+https://github.com/lunchbox-labs/opencode-model-profiles.git"
+    "git+https://github.com/lunchbox-labs/kilo-model-profiles.git"
   ) {
     throw new Error(
       "The package repository must match the trusted publisher repository.",

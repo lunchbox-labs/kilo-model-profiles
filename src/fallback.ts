@@ -15,16 +15,16 @@ import type { RefAssignment } from "./resolution.ts";
 import { processProfileVariable } from "./selection.ts";
 
 /**
- * Models connected providers offered when last checked, per instance directory and provider setup. OpenCode keeps
+ * Models connected providers offered when last checked, per instance directory and provider setup. Kilo keeps
  * the plugin module loaded when it reloads a project, so this outlives the reload that lets the config hook leave
- * unavailable refs unapplied. It is also saved in OpenCode's state directory, so a new process (such as
- * `opencode run`) leaves them out from the start.
+ * unavailable refs unapplied. It is also saved in Kilo's state directory, so a new process (such as
+ * `kilo run`) leaves them out from the start.
  */
 const availability = new Map<string, ReadonlySet<string>>();
 
 /**
  * Every model a ref has put on an agent, per directory, also saved. A session can keep asking for one after its ref
- * is fixed or left out, and only those are moved when OpenCode took the model from the agent or the session.
+ * is fixed or left out, and only those are moved when Kilo took the model from the agent or the session.
  */
 const refModels = new Map<string, ReadonlySet<string>>();
 
@@ -32,7 +32,7 @@ export function knownRefModels(directory: string): ReadonlySet<string> {
   return refModels.get(directory) ?? new Set();
 }
 
-/** Variables OpenCode's own provider loaders read besides the catalog's lists, such as Bedrock's region and profile. */
+/** Variables Kilo's own provider loaders read besides the catalog's lists, such as Bedrock's region and profile. */
 const loaderVariables = [
   "AWS_ACCESS_KEY_ID",
   "AWS_BEARER_TOKEN_BEDROCK",
@@ -51,7 +51,7 @@ const loaderVariables = [
   "VERTEX_LOCATION",
 ];
 
-/** Used only when OpenCode's models.dev catalog is not cached, so which variables providers read is unknown. */
+/** Used only when Kilo's models.dev catalog is not cached, so which variables providers read is unknown. */
 const credentialLikeVariable =
   /TOKEN|(?:API_KEY|SECRET|ACCESS_KEY|CREDENTIALS|_PROFILE|_PROJECT|_REGION|_LOCATION|_RESOURCE_NAME)$/;
 
@@ -61,7 +61,7 @@ function sortedStrings(value: unknown): string[] {
     : [];
 }
 
-/** The environment variables each provider in OpenCode's cached models.dev catalog connects with; undefined without it. */
+/** The environment variables each provider in Kilo's cached models.dev catalog connects with; undefined without it. */
 async function catalogVariables(
   modelsFile: string,
 ): Promise<ReadonlySet<string> | undefined> {
@@ -102,9 +102,13 @@ export async function providerSetupKey(
   } catch {
     // Without auth.json only the config and the environment tell setups apart.
   }
+  const source = environment.KILO_MODELS_URL;
+  const cachedCatalog =
+    source === undefined || source === "" || source === "https://models.dev"
+      ? "models.json"
+      : `models-${createHash("sha1").update(source).digest("hex")}.json`;
   const catalog = await catalogVariables(
-    environment.OPENCODE_MODELS_PATH ??
-      path.join(directories.cache, "models.json"),
+    environment.KILO_MODELS_PATH ?? path.join(directories.cache, cachedCatalog),
   );
   const isProviderVariable = (name: string) =>
     name !== processProfileVariable &&
@@ -334,7 +338,7 @@ export interface ConnectedProviders {
   default: Record<string, string>;
 }
 
-/** Reads OpenCode's provider list response; anything unexpected yields undefined so nothing changes. */
+/** Reads Kilo's provider list response; anything unexpected yields undefined so nothing changes. */
 export function readConnectedProviders(
   data: unknown,
 ): ConnectedProviders | undefined {
@@ -393,7 +397,7 @@ export function staleDirections(
   };
 }
 
-/** OpenCode's recently used models, which it tries before a provider's default when no `model` is set. */
+/** Kilo's recently used models, which it tries before a provider's default when no `model` is set. */
 export async function recentModels(state: string): Promise<string[]> {
   try {
     const value: unknown = JSON.parse(
@@ -417,13 +421,13 @@ export async function recentModels(state: string): Promise<string[]> {
 export interface FallbackInput {
   /** The agent's own model and variant, when it had one besides its ref. */
   own?: { model: string; variant?: string };
-  /** The model of the session that started this subagent, which OpenCode gives a subagent without a model. */
+  /** The model of the session that started this subagent, which Kilo gives a subagent without a model. */
   parentModel?: string;
   available: ReadonlySet<string>;
   connected: ConnectedProviders;
-  /** The top-level `model` from OpenCode's config. */
+  /** The top-level `model` from Kilo's config. */
   configuredModel?: string;
-  /** Provider ids configured under `provider`, which OpenCode prefers for its default. */
+  /** Provider ids configured under `provider`, which Kilo prefers for its default. */
   configuredProviders: readonly string[];
   recent: readonly string[];
 }
@@ -460,8 +464,8 @@ function hasVariant(
 }
 
 /**
- * The model OpenCode would use for the agent without its ref: the agent's own `model`, else for a subagent its
- * parent's model, else OpenCode's default (the configured `model`, a recently used model, then a connected
+ * The model Kilo would use for the agent without its ref: the agent's own `model`, else for a subagent its
+ * parent's model, else Kilo's default (the configured `model`, a recently used model, then a connected
  * provider's default), skipping unavailable ones.
  */
 export function fallbackModel(input: FallbackInput): FallbackModel | undefined {

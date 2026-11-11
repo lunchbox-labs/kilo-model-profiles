@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cdn.jsdelivr.net/npm/@lunchbox-labs/opencode-model-profiles/schema.json",
-  "title": "OpenCode Model Profiles",
-  "description": "Named model refs for OpenCode agents: defaults, per-worktree profiles and built-in agent refs.",
+  "$id": "https://cdn.jsdelivr.net/npm/@lunchbox-labs/kilo-model-profiles/schema.json",
+  "title": "Kilo Model Profiles",
+  "description": "Named model refs for Kilo agents: defaults, per-worktree profiles and built-in agent refs.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -10,7 +10,7 @@
       "type": "string"
     },
     "defaultProfile": {
-      "description": "Profile used when no profile is saved for the worktree and OPENCODE_MODEL_PROFILE is unset.",
+      "description": "Profile used when no profile is saved for the worktree and KILO_MODEL_PROFILE is unset.",
       "type": "string",
       "minLength": 1
     },
@@ -29,11 +29,26 @@
       }
     },
     "builtins": {
-      "description": "Ref for each built-in OpenCode agent. Built-in agents without a ref keep OpenCode's default model.",
+      "description": "Ref for each built-in Kilo agent. Built-in agents without a ref keep Kilo's default model.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "code": {
+          "$ref": "#/$defs/refName"
+        },
         "build": {
+          "$ref": "#/$defs/refName"
+        },
+        "debug": {
+          "$ref": "#/$defs/refName"
+        },
+        "ask": {
+          "$ref": "#/$defs/refName"
+        },
+        "orchestrator": {
+          "$ref": "#/$defs/refName"
+        },
+        "scout": {
           "$ref": "#/$defs/refName"
         },
         "plan": {
@@ -77,7 +92,7 @@
             "$ref": "#/$defs/modelIdentifier"
           },
           {
-            "description": "A model and the settings OpenCode sends with it, as on an OpenCode agent entry. Any other key goes into options, as OpenCode does for an agent. Keys that configure the agent rather than its model are not allowed.",
+            "description": "A model and the settings Kilo sends with it, as on an Kilo agent entry. Any other key goes into options, as Kilo does for an agent. Keys that configure the agent rather than its model are not allowed.",
             "type": "object",
             "required": ["model"],
             "properties": {

@@ -16,7 +16,7 @@ export interface ProfileSelection {
 }
 
 const profileOrigins: Record<Exclude<ProfileSource, "none">, string> = {
-  environment: "OPENCODE_MODEL_PROFILE",
+  environment: "KILO_MODEL_PROFILE",
   saved: "the saved worktree selection",
   defaultProfile: "defaultProfile",
 };
@@ -78,7 +78,7 @@ export function unavailableModelNotice(
   const reason = providerConnected
     ? `"${providerId}" has no model "${model.slice(providerId.length + 1)}"`
     : `provider "${providerId}" is not connected`;
-  return `Ref "${ref}" uses ${model}, but ${reason}; ${agents.join(", ")} ${agents.length === 1 ? "falls" : "fall"} back to OpenCode's model until you fix the ref or pick another profile.`;
+  return `Ref "${ref}" uses ${model}, but ${reason}; ${agents.join(", ")} ${agents.length === 1 ? "falls" : "fall"} back to Kilo's model until you fix the ref or pick another profile.`;
 }
 
 export interface RefResolution {
@@ -88,7 +88,7 @@ export interface RefResolution {
   /** Names of the other model settings the ref sets: temperature, top_p and each provider option. */
   settings?: string[];
   source: "profile" | "defaults" | "unresolved";
-  /** Set when no connected provider offers the model, so agents keep OpenCode's model. */
+  /** Set when no connected provider offers the model, so agents keep Kilo's model. */
   unavailable?: true;
   agents: string[];
 }
@@ -135,7 +135,7 @@ function resolveRef(
     : { choice: defaultChoice, source: "defaults" };
 }
 
-/** Merges like OpenCode merges agent options: nested objects key by key, anything else replaced. */
+/** Merges like Kilo merges agent options: nested objects key by key, anything else replaced. */
 export function mergeOptions(
   target: Record<string, unknown>,
   source: Record<string, unknown>,
@@ -186,7 +186,7 @@ function applyChoice(
   }
 }
 
-/** The sampling settings OpenCode sends with a request, as `chat.params` sees them. */
+/** The sampling settings Kilo sends with a request, as `chat.params` sees them. */
 export interface SamplingParams {
   temperature?: number;
   topP?: number;
@@ -209,7 +209,7 @@ export function restoreOwnSampling(
   if (assignment === undefined || assignment.model === model) {
     return;
   }
-  // OpenCode leaves temperature unset for a model that does not take one; that stays as it is.
+  // Kilo leaves temperature unset for a model that does not take one; that stays as it is.
   if (
     assignment.temperature !== undefined &&
     params.temperature !== undefined
@@ -236,7 +236,7 @@ function withoutModelRef(agent: Record<string, unknown>): {
 }
 
 /**
- * Returns a new agent map and leaves the given one untouched: OpenCode keeps the global config's
+ * Returns a new agent map and leaves the given one untouched: Kilo keeps the global config's
  * agent objects for the whole process, so mutating them would lose each modelRef on the next reload.
  */
 export function applyModelRefs(
@@ -244,6 +244,7 @@ export function applyModelRefs(
   document: ModelsDocument,
   profile: string | null,
   availableModels?: ReadonlySet<string>,
+  environment: NodeJS.ProcessEnv = process.env,
 ): AppliedModelRefs {
   const notices: string[] = [];
   const assignments: RefAssignment[] = [];
@@ -252,7 +253,15 @@ export function applyModelRefs(
   const agents: Record<string, unknown> = {};
   const refAgents = new Map<string, string[]>();
   const builtIns: readonly string[] = builtInAgentNames;
-  const sourceAgents = isRecord(configuredAgents) ? configuredAgents : {};
+  const sourceAgents = isRecord(configuredAgents)
+    ? { ...configuredAgents }
+    : {};
+  if (Object.hasOwn(sourceAgents, "build")) {
+    if (!Object.hasOwn(sourceAgents, "code")) {
+      sourceAgents.code = sourceAgents.build;
+    }
+    delete sourceAgents.build;
+  }
 
   const names = [
     ...new Set([
@@ -262,6 +271,19 @@ export function applyModelRefs(
   ];
   for (const name of names) {
     const original = ownValue(sourceAgents, name);
+    if (
+      name === "scout" &&
+      original === undefined &&
+      ![
+        environment.KILO_EXPERIMENTAL,
+        environment.KILO_EXPERIMENTAL_SCOUT,
+      ].some((value) => value?.toLowerCase() === "true" || value === "1")
+    ) {
+      notices.push(
+        "builtins.scout is ignored while Kilo's scout agent is disabled; enable KILO_EXPERIMENTAL_SCOUT to use it.",
+      );
+      continue;
+    }
     if (original !== undefined && !isRecord(original)) {
       agents[name] = original;
       continue;
@@ -276,7 +298,7 @@ export function applyModelRefs(
       (typeof declared !== "string" || declared.trim() === "")
     ) {
       notices.push(
-        `Agent ${name} has a modelRef that is not a ref name; it keeps OpenCode's model.`,
+        `Agent ${name} has a modelRef that is not a ref name; it keeps Kilo's model.`,
       );
     }
     const ref =
@@ -347,7 +369,7 @@ export function applyModelRefs(
       const where =
         profile === null ? "defaults" : `profile "${profile}" or defaults`;
       notices.push(
-        `Ref "${ref}" is not defined in ${where}; ${users.join(", ")} ${users.length === 1 ? "keeps" : "keep"} OpenCode's model.`,
+        `Ref "${ref}" is not defined in ${where}; ${users.join(", ")} ${users.length === 1 ? "keeps" : "keep"} Kilo's model.`,
       );
       return { ref, source: "unresolved", agents: users };
     }

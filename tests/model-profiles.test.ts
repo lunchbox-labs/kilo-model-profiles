@@ -79,12 +79,12 @@ async function temporaryRoot(t: { after: (fn: () => Promise<void>) => void }) {
   const root = await mkdtemp(join(tmpdir(), "model-profiles-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const environment = {
-    OPENCODE_CONFIG_DIR: join(root, "config"),
+    KILO_CONFIG_DIR: join(root, "config"),
     XDG_STATE_HOME: join(root, "state"),
     XDG_DATA_HOME: join(root, "data"),
     XDG_CACHE_HOME: join(root, "cache"),
   };
-  await mkdir(environment.OPENCODE_CONFIG_DIR, { recursive: true });
+  await mkdir(environment.KILO_CONFIG_DIR, { recursive: true });
   return { root, environment, configFile: modelsFilePath({}, environment) };
 }
 
@@ -131,7 +131,7 @@ test("parses string and object model values and skips bad entries individually",
   }
 });
 
-test("refs take OpenCode's agent model settings and move other keys into options, as OpenCode does", () => {
+test("refs take Kilo's agent model settings and move other keys into options, as Kilo does", () => {
   const { document, notices } = documentOf(`{
     "defaults": {
       "tuned": {
@@ -289,16 +289,16 @@ test("a profile's ref replaces the default's whole entry, settings included", ()
   });
 });
 
-test("the config hook strips the modelRef OpenCode copied into options and merges the ref's options there", async (t) => {
+test("the config hook strips the modelRef Kilo copied into options and merges the ref's options there", async (t) => {
   const { environment, configFile } = await temporaryRoot(t);
   await writeFile(
     configFile,
     `{ "defaults": { "coding": { "model": "openai/gpt-6", "top_p": 0.9, "reasoningEffort": "high" } } }`,
   );
-  // OpenCode moves keys it does not know on an agent entry, modelRef included, into the agent's options.
+  // Kilo moves keys it does not know on an agent entry, modelRef included, into the agent's options.
   const config: Record<string, unknown> = {
     agent: {
-      build: {
+      code: {
         modelRef: "coding",
         options: { modelRef: "coding", custom: 1, reasoningEffort: "low" },
       },
@@ -310,7 +310,7 @@ test("the config hook strips the modelRef OpenCode copied into options and merge
     environment,
   });
   assert.deepEqual(config.agent, {
-    build: {
+    code: {
       model: "openai/gpt-6",
       top_p: 0.9,
       options: { custom: 1, reasoningEffort: "high" },
@@ -331,7 +331,7 @@ test("a request on another model than the ref's gets the agent's own temperature
   );
   Object.assign(process.env, environment);
   t.after(() => {
-    delete process.env.OPENCODE_CONFIG_DIR;
+    delete process.env.KILO_CONFIG_DIR;
     delete process.env.XDG_STATE_HOME;
     delete process.env.XDG_DATA_HOME;
     delete process.env.XDG_CACHE_HOME;
@@ -374,7 +374,7 @@ test("a request on another model than the ref's gets the agent's own temperature
   assert.deepEqual(
     await params("builder", "anthropic/claude-opus-5-5", undefined),
     { temperature: undefined, topP: undefined },
-    "a model OpenCode sends no temperature to still gets none",
+    "a model Kilo sends no temperature to still gets none",
   );
   assert.deepEqual(
     await params("helper", "anthropic/claude-opus-5-5", 0.7),
@@ -470,7 +470,7 @@ test("the selected profile's ref wins over defaults, and unresolved refs leave t
   );
 });
 
-test("built-in agents take refs from builtins unless they set their own ref or model, and others keep OpenCode's default", () => {
+test("built-in agents take refs from builtins unless they set their own ref or model, and others keep Kilo's default", () => {
   const { document } = documentOf(realisticModels);
   const applied = applyModelRefs(
     {
@@ -572,58 +572,51 @@ test("profile selection prefers the environment, then the saved choice, then def
   assert.equal(unknown.profile, "primary");
   assert.equal(unknown.source, "defaultProfile");
   assert.deepEqual(unknown.notices, [
-    'Profile "gone" from OPENCODE_MODEL_PROFILE is not defined in models.jsonc; using profile "primary".',
+    'Profile "gone" from KILO_MODEL_PROFILE is not defined in models.jsonc; using profile "primary".',
     'Profile "removed" from the saved worktree selection is not defined in models.jsonc; using profile "primary".',
   ]);
   assert.deepEqual(selectProfile(document, "gone", null), {
     profile: null,
     source: "saved",
     notices: [
-      'Profile "gone" from OPENCODE_MODEL_PROFILE is not defined in models.jsonc; using defaults only.',
+      'Profile "gone" from KILO_MODEL_PROFILE is not defined in models.jsonc; using defaults only.',
     ],
   });
-  assert.equal(processProfile({ OPENCODE_MODEL_PROFILE: "  " }), undefined);
-  assert.equal(processProfile({ OPENCODE_MODEL_PROFILE: "fast" }), "fast");
+  assert.equal(processProfile({ KILO_MODEL_PROFILE: "  " }), undefined);
+  assert.equal(processProfile({ KILO_MODEL_PROFILE: "fast" }), "fast");
 });
 
 test("selection files are keyed per worktree on POSIX and Windows paths and round-trip", async (t) => {
-  const posix = selectionFilePath("/state/opencode", "/work/repo", "linux");
+  const posix = selectionFilePath("/state/kilo", "/work/repo", "linux");
   assert.match(
     posix,
-    /^\/state\/opencode\/model-profiles\/worktrees\/[0-9a-f]{32}\.json$/,
+    /^\/state\/kilo\/model-profiles\/worktrees\/[0-9a-f]{32}\.json$/,
   );
-  assert.equal(
-    selectionFilePath("/state/opencode", "/work/repo/", "linux"),
-    posix,
-  );
+  assert.equal(selectionFilePath("/state/kilo", "/work/repo/", "linux"), posix);
   assert.notEqual(
-    selectionFilePath("/state/opencode", "/work/Repo", "linux"),
+    selectionFilePath("/state/kilo", "/work/Repo", "linux"),
     posix,
   );
 
   const windows = selectionFilePath(
-    "C:\\Users\\me\\.local\\state\\opencode",
+    "C:\\Users\\me\\.local\\state\\kilo",
     "C:\\Work\\Repo",
     "win32",
   );
   assert.match(
     windows,
-    /^C:\\Users\\me\\\.local\\state\\opencode\\model-profiles\\worktrees\\[0-9a-f]{32}\.json$/,
+    /^C:\\Users\\me\\\.local\\state\\kilo\\model-profiles\\worktrees\\[0-9a-f]{32}\.json$/,
   );
   for (const variant of ["c:\\work\\repo\\", "C:/Work/Repo", "c:/WORK/repo/"]) {
     assert.equal(
-      selectionFilePath(
-        "C:\\Users\\me\\.local\\state\\opencode",
-        variant,
-        "win32",
-      ),
+      selectionFilePath("C:\\Users\\me\\.local\\state\\kilo", variant, "win32"),
       windows,
       variant,
     );
   }
   assert.equal(
     stateDirectory({ XDG_STATE_HOME: "/xdg" }),
-    join("/xdg", "opencode"),
+    join("/xdg", "kilo"),
   );
 
   const { root } = await temporaryRoot(t);
@@ -644,7 +637,7 @@ test("selection files are keyed per worktree on POSIX and Windows paths and roun
   assert.match(corrupt.notice ?? "", /invalid/);
 });
 
-test("every fallback reports a notice and leaves agents on OpenCode's models", async (t) => {
+test("every fallback reports a notice and leaves agents on Kilo's models", async (t) => {
   const { environment, configFile } = await temporaryRoot(t);
   const agents = () => ({
     builder: { modelRef: "reasoning", model: "openai/native" },
@@ -698,7 +691,7 @@ test("every fallback reports a notice and leaves agents on OpenCode's models", a
     configFile,
     '{ "defaults": { "reasoning": "openai/gpt-6-astra" }, "profiles": { "fast": { "reasoning": "openai/gpt-6-luna" } } }',
   );
-  const unknownProfile = await resolveWith({ OPENCODE_MODEL_PROFILE: "gone" });
+  const unknownProfile = await resolveWith({ KILO_MODEL_PROFILE: "gone" });
   assert.deepEqual(unknownProfile.config.agent, {
     builder: { model: "openai/gpt-6-astra" },
   });
@@ -719,9 +712,9 @@ test("every fallback reports a notice and leaves agents on OpenCode's models", a
   );
 });
 
-test("models.jsonc lives in OpenCode's config directory unless configFile points elsewhere", () => {
-  const configDirectory = resolve("/config/opencode");
-  const environment = { OPENCODE_CONFIG_DIR: configDirectory };
+test("models.jsonc lives in Kilo's config directory unless configFile points elsewhere", () => {
+  const configDirectory = resolve("/config/kilo");
+  const environment = { KILO_CONFIG_DIR: configDirectory };
   assert.equal(
     modelsFilePath(undefined, environment),
     join(configDirectory, "models.jsonc"),
@@ -752,7 +745,7 @@ test("the environment profile overrides the saved worktree selection", async (t)
   const { report } = await resolveModelProfiles(config, {
     configFile,
     worktree,
-    environment: { ...environment, OPENCODE_MODEL_PROFILE: "anthropic-latest" },
+    environment: { ...environment, KILO_MODEL_PROFILE: "anthropic-latest" },
   });
   assert.equal(report.profile, "anthropic-latest");
   assert.equal(report.profileSource, "environment");
@@ -775,7 +768,7 @@ test("the server config hook applies refs, publishes its report in its plugin en
   await writeFile(configFile, realisticModels);
   Object.assign(process.env, environment);
   t.after(() => {
-    delete process.env.OPENCODE_CONFIG_DIR;
+    delete process.env.KILO_CONFIG_DIR;
     delete process.env.XDG_STATE_HOME;
     delete process.env.XDG_DATA_HOME;
     delete process.env.XDG_CACHE_HOME;
@@ -866,20 +859,20 @@ test("the /model-config dialog lists profiles with the current one marked, refs 
     options.map((option) => [option.title, option.value, option.footer]),
     [
       ["Defaults only", "defaults", undefined],
-      ["primary", "profile:primary", "current, OPENCODE_MODEL_PROFILE"],
+      ["primary", "profile:primary", "current, KILO_MODEL_PROFILE"],
       ["fast", "profile:fast", undefined],
       [
         "coding → openai/gpt-5.6-sol (medium; sets temperature, reasoningEffort)",
         "ref:coding",
         "profile",
       ],
-      ["missing → not defined, OpenCode's model", "ref:missing", "fallback"],
+      ["missing → not defined, Kilo's model", "ref:missing", "fallback"],
       ["Something fell back.", "notice:0", undefined],
     ],
   );
   assert.match(
     options[0]?.category ?? "",
-    /OPENCODE_MODEL_PROFILE=primary overrides/,
+    /KILO_MODEL_PROFILE=primary overrides/,
   );
   assert.equal(options[3]?.description, "general");
   assert.deepEqual(
@@ -968,8 +961,8 @@ test("models no connected provider offers are reported, and toasts summarise sev
     { id: "openrouter", models: { "openai/gpt-6-astra": {} } },
   ];
   assert.deepEqual(unavailableModelNotices(refs, providers), [
-    'Ref "coding" uses openai/gpt-5.6-sol, but "openai" has no model "gpt-5.6-sol"; general falls back to OpenCode\'s model until you fix the ref or pick another profile.',
-    'Ref "reasoning" uses anthropic/claude-opus-5-5, but provider "anthropic" is not connected; plan, reviewer fall back to OpenCode\'s model until you fix the ref or pick another profile.',
+    'Ref "coding" uses openai/gpt-5.6-sol, but "openai" has no model "gpt-5.6-sol"; general falls back to Kilo\'s model until you fix the ref or pick another profile.',
+    'Ref "reasoning" uses anthropic/claude-opus-5-5, but provider "anthropic" is not connected; plan, reviewer fall back to Kilo\'s model until you fix the ref or pick another profile.',
   ]);
   assert.deepEqual(
     unavailableModelNotices(refs, []),
@@ -1038,7 +1031,7 @@ test("refs to models known to be unavailable are not applied, and agents keep th
   assert.equal(reasoning?.unavailable, true);
   assert.ok(
     applied.notices.includes(
-      'Ref "reasoning" uses openai/gpt-6-astra, but "openai" has no model "gpt-6-astra"; builder falls back to OpenCode\'s model until you fix the ref or pick another profile.',
+      'Ref "reasoning" uses openai/gpt-6-astra, but "openai" has no model "gpt-6-astra"; builder falls back to Kilo\'s model until you fix the ref or pick another profile.',
     ),
   );
   assert.deepEqual(
@@ -1060,7 +1053,7 @@ test("refs to models known to be unavailable are not applied, and agents keep th
   );
 });
 
-test("a fallback uses the agent's own model, then its parent's, then OpenCode's configured, recent or provider default model", () => {
+test("a fallback uses the agent's own model, then its parent's, then Kilo's configured, recent or provider default model", () => {
   const assignment = {
     agent: "builder",
     ref: "reasoning",
@@ -1120,7 +1113,7 @@ test("a fallback uses the agent's own model, then its parent's, then OpenCode's 
       configuredModel: "openai/gpt-6-astra",
     }),
     { providerID: "openai", modelID: "recent" },
-    "a subagent without its own model follows its parent, as OpenCode does",
+    "a subagent without its own model follows its parent, as Kilo does",
   );
   assert.deepEqual(
     fallbackModel({
@@ -1133,7 +1126,7 @@ test("a fallback uses the agent's own model, then its parent's, then OpenCode's 
   assert.deepEqual(
     fallbackModel({ ...base, configuredProviders: ["openai"] }),
     { providerID: "openai", modelID: "gpt-6-astra" },
-    "OpenCode prefers a provider configured under provider",
+    "Kilo prefers a provider configured under provider",
   );
   assert.deepEqual(fallbackModel(base), {
     providerID: "anthropic",
@@ -1173,7 +1166,7 @@ test("a fallback uses the agent's own model, then its parent's, then OpenCode's 
   assert.equal(readConnectedProviders({ nope: true }), undefined);
 });
 
-test("a prompt to an unavailable ref model moves to OpenCode's model, and the project reloads once idle", async (t) => {
+test("a prompt to an unavailable ref model moves to Kilo's model, and the project reloads once idle", async (t) => {
   const { environment, configFile } = await temporaryRoot(t);
   await writeFile(
     configFile,
@@ -1181,7 +1174,7 @@ test("a prompt to an unavailable ref model moves to OpenCode's model, and the pr
   );
   Object.assign(process.env, environment);
   t.after(() => {
-    delete process.env.OPENCODE_CONFIG_DIR;
+    delete process.env.KILO_CONFIG_DIR;
     delete process.env.XDG_STATE_HOME;
     delete process.env.XDG_DATA_HOME;
     delete process.env.XDG_CACHE_HOME;
@@ -1330,7 +1323,7 @@ test("a prompt to an unavailable ref model moves to OpenCode's model, and the pr
   assert.deepEqual(
     handSet.model,
     { providerID: "other", modelID: "missing" },
-    "an unavailable model no ref ever named is left as OpenCode would use it",
+    "an unavailable model no ref ever named is left as Kilo would use it",
   );
 
   const explicit = {
@@ -1528,7 +1521,7 @@ async function serverProject(
   await writeFile(configFile, models);
   Object.assign(process.env, environment);
   t.after(() => {
-    delete process.env.OPENCODE_CONFIG_DIR;
+    delete process.env.KILO_CONFIG_DIR;
     delete process.env.XDG_STATE_HOME;
     delete process.env.XDG_DATA_HOME;
     delete process.env.XDG_CACHE_HOME;
@@ -1646,7 +1639,7 @@ test("a prompt that falls back shows a warning toast once, including when the re
   ]);
 });
 
-/** One OpenCode process on the directory: the config hook, a prompt to builder, then an idle session. */
+/** One Kilo process on the directory: the config hook, a prompt to builder, then an idle session. */
 const processDriver = `
 const { default: server } = await import(process.env.MODEL_PROFILES_SERVER);
 const directory = process.env.MODEL_PROFILES_DIRECTORY;
@@ -1738,7 +1731,7 @@ test("processes with different providers on one directory each keep their own sa
   });
 });
 
-test("the provider setup follows the variables providers connect with, from OpenCode's catalog when cached", async (t) => {
+test("the provider setup follows the variables providers connect with, from Kilo's catalog when cached", async (t) => {
   const { root } = await temporaryRoot(t);
   const directories = { data: join(root, "data"), cache: join(root, "cache") };
   const key = (environment: NodeJS.ProcessEnv) =>
@@ -1772,7 +1765,7 @@ test("the provider setup follows the variables providers connect with, from Open
       label,
     );
     assert.equal(
-      await key({ OPENCODE_MODEL_PROFILE: "fast" }),
+      await key({ KILO_MODEL_PROFILE: "fast" }),
       none,
       `the profile variable is not a provider setup ${label}`,
     );
@@ -2069,10 +2062,10 @@ test("a reload the host keeps refusing stops after a few tries with a warning to
   await settle();
   assert.equal(state.disposals, 3);
   assert.deepEqual(state.toasts, [
-    "OpenCode did not reload the project after 3 tries, so built-in agents such as compaction and title keep an unavailable ref's model until OpenCode restarts.",
+    "Kilo did not reload the project after 3 tries, so built-in agents such as compaction and title keep an unavailable ref's model until Kilo restarts.",
   ]);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await sendPrompt(hooks, "build", { providerID: "openai", modelID: "base" });
+    await sendPrompt(hooks, "code", { providerID: "openai", modelID: "base" });
     await idle();
     await settle();
   }
@@ -2174,7 +2167,7 @@ test("a held-back or refused reload for refs that are available again says so", 
   } as never;
   const learn = await server.server(pluginInput, undefined);
   await learn.config?.({ agent: {} });
-  await sendPrompt(learn, "build", { providerID: "openai", modelID: "base" });
+  await sendPrompt(learn, "code", { providerID: "openai", modelID: "base" });
 
   const hooks = await server.server(pluginInput, undefined);
   const config = { agent: {} };
@@ -2208,7 +2201,7 @@ test("a held-back or refused reload for refs that are available again says so", 
     );
   }
   assert.deepEqual(state.toasts.slice(1), [
-    "OpenCode did not reload the project after 3 tries, so refs that are available again apply once OpenCode restarts.",
+    "Kilo did not reload the project after 3 tries, so refs that are available again apply once Kilo restarts.",
   ]);
 });
 
@@ -2256,7 +2249,7 @@ test("a terminal that closes while a reload attempt is checking is not missed", 
   assert.equal(state.terminalChecks, 2);
 });
 
-test("a model set by hand stays as OpenCode would use it, even after a ref put it on an agent", async (t) => {
+test("a model set by hand stays as Kilo would use it, even after a ref put it on an agent", async (t) => {
   const { configFile, directory } = await serverProject(
     t,
     '{ "defaults": { "reasoning": "anthropic/opus" } }',
@@ -2346,7 +2339,7 @@ test("the dialog marks refs the server found unavailable, and the TUI does not w
   const row = options.find((option) => option.value === "ref:reasoning");
   assert.deepEqual(
     [row?.title, row?.footer],
-    ["reasoning → gone/model, unavailable, OpenCode's model", "fallback"],
+    ["reasoning → gone/model, unavailable, Kilo's model", "fallback"],
   );
   assert.deepEqual(
     unavailableModelNotices(refs, [{ id: "openai", models: {} }]),
@@ -2573,7 +2566,7 @@ test("a pending pick leaves the reload to the server plugin when it reloads at t
   assert.equal(state.disposals, 0, "the project reloads once, not twice");
 });
 
-test("a pending pick OpenCode refuses to reload for is not retried by the same idle moment", async (t) => {
+test("a pending pick Kilo refuses to reload for is not retried by the same idle moment", async (t) => {
   const { state, emit, pick } = await fakeTui(t);
   state.busy = true;
   await pick("profile:fast");
@@ -2595,7 +2588,7 @@ test("a pending pick OpenCode refuses to reload for is not retried by the same i
   await waitFor(pendingPickWait);
   assert.equal(state.disposals, 1);
   assert.deepEqual(state.toasts.slice(-1), [
-    "Saved fast, but OpenCode did not reload. It applies on the next reload.",
+    "Saved fast, but Kilo did not reload. It applies on the next reload.",
   ]);
 });
 
@@ -2609,7 +2602,7 @@ test("a terminal list that fails holds a pick back with a warning, and a pending
   );
   assert.equal(state.disposals, 0);
   assert.deepEqual(state.toasts.slice(-1), [
-    "Saved fast for this worktree, but OpenCode could not report whether a terminal is open, so it did not reload. It applies on the next reload.",
+    "Saved fast for this worktree, but Kilo could not report whether a terminal is open, so it did not reload. It applies on the next reload.",
   ]);
 
   state.terminalListFails = false;

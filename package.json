@@ -1,12 +1,12 @@
 {
-  "name": "@lunchbox-labs/opencode-model-profiles",
+  "name": "@lunchbox-labs/kilo-model-profiles",
   "version": "0.2.1",
   "description": "Pick agent models by name, with defaults and per-worktree profiles",
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lunchbox-labs/opencode-model-profiles.git"
+    "url": "git+https://github.com/lunchbox-labs/kilo-model-profiles.git"
   },
   "engines": {
     "node": ">=22.18.0"
@@ -48,11 +48,11 @@
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
     "@eslint/js": "10.0.1",
-    "@opencode-ai/plugin": "1.19.5",
-    "@opencode-ai/sdk": "1.19.5",
-    "@opentui/core": "0.4.5",
-    "@opentui/keymap": "0.4.5",
-    "@opentui/solid": "0.4.5",
+    "@kilocode/plugin": "7.8.27",
+    "@kilocode/sdk": "7.8.27",
+    "@opentui/core": "0.5.11",
+    "@opentui/keymap": "0.5.11",
+    "@opentui/solid": "0.5.11",
     "@types/node": "24.19.2",
     "concurrently": "10.0.6",
     "eslint": "10.14.0",
