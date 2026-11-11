@@ -191,3 +191,5 @@ stateDiagram-v2
 ## Host path ownership
 
 Persisted selection and availability files belong to Kilo, never OpenCode. Kilo initializes its state path before plugins load. When `XDG_STATE_HOME` is unset and Kilo's writable data-directory `state` fallback exists, both server and picker use that sticky fallback. An explicit `XDG_STATE_HOME` uses the normal XDG state path. A process restart re-evaluates this host choice; selecting a profile never moves or imports another host's files.
+
+Kilo's provider setup fingerprint includes its effective organization selector, following environment, stored OAuth account and provider configuration precedence. Different organizations do not reuse each other's availability. Loader-only environment variables remain part of the fingerprint even when the core models.dev catalog omits Kilo's injected providers. Credential values are never hashed or saved, and organization IDs are used only inside the fingerprint, not written into availability files.

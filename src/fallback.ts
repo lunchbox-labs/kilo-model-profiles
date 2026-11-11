@@ -34,6 +34,11 @@ export function knownRefModels(directory: string): ReadonlySet<string> {
 
 /** Variables Kilo's own provider loaders read besides the catalog's lists, such as Bedrock's region and profile. */
 const loaderVariables = [
+  "AICORE_DEPLOYMENT_ID",
+  "AICORE_RESOURCE_GROUP",
+  "AICORE_SERVICE_KEY",
+  "APERTIS_API_KEY",
+  "APERTIS_BASE_URL",
   "AWS_ACCESS_KEY_ID",
   "AWS_BEARER_TOKEN_BEDROCK",
   "AWS_CONTAINER_CREDENTIALS_FULL_URI",
@@ -41,13 +46,29 @@ const loaderVariables = [
   "AWS_PROFILE",
   "AWS_REGION",
   "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+  "AZURE_OPENAI_ENDPOINT",
+  "AZURE_OPENAI_RESOURCE_NAME",
   "AZURE_RESOURCE_NAME",
+  "CF_AIG_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_KEY",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_GATEWAY_ID",
   "GCLOUD_PROJECT",
   "GCP_PROJECT",
+  "GITLAB_INSTANCE_URL",
+  "GITLAB_TOKEN",
   "GOOGLE_APPLICATION_CREDENTIALS",
   "GOOGLE_CLOUD_LOCATION",
   "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_VERTEX_LOCATION",
+  "GOOGLE_VERTEX_PROJECT",
+  "KILO_API_KEY",
+  "KILO_ORG_ID",
+  "SNOWFLAKE_ACCOUNT",
+  "SNOWFLAKE_CORTEX_PAT",
+  "SNOWFLAKE_CORTEX_TOKEN",
   "VERTEX_LOCATION",
 ];
 
@@ -81,11 +102,35 @@ async function catalogVariables(
   }
 }
 
+/** Kilo's non-secret organization selector, in the same precedence as its model catalog. */
+function kiloOrganization(
+  config: Record<string, unknown>,
+  environment: NodeJS.ProcessEnv,
+  authOrganization: string | undefined,
+): string | undefined {
+  const provider = isRecord(config.provider) ? config.provider.kilo : undefined;
+  const options =
+    isRecord(provider) && isRecord(provider.options) ? provider.options : {};
+  const explicit = [
+    environment.KILO_ORG_ID,
+    authOrganization,
+    options.kilocodeOrganizationId,
+  ].find((value): value is string => typeof value === "string" && value !== "");
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  if (typeof options.baseURL !== "string") {
+    return undefined;
+  }
+  return URL.parse(options.baseURL)
+    ?.pathname.match(/\/api\/organizations\/([^/]+)/)
+    ?.at(1);
+}
+
 /**
- * Identifies what decides which providers connect, without reading any secret: the provider config, which
- * providers `auth.json` holds credentials for, and which provider variables are set (by name only). Processes
- * started from different environments on one directory then keep separate availability instead of overwriting
- * each other's.
+ * Identifies provider setups without hashing or saving credential values: provider config, authenticated provider
+ * IDs, provider variable names and Kilo's non-secret organization selector. Processes using different organizations
+ * on one directory then keep separate availability instead of overwriting each other's.
  */
 export async function providerSetupKey(
   config: Record<string, unknown>,
@@ -93,12 +138,21 @@ export async function providerSetupKey(
   directories: { data: string; cache: string },
 ): Promise<string> {
   let authProviders: string[] = [];
+  let authOrganization: string | undefined;
   try {
     const auth: unknown = JSON.parse(
       await readFile(path.join(directories.data, "auth.json"), "utf8"),
     );
-    // Only the provider ids are kept; the credentials under them never reach the key.
+    // Only provider IDs and the Kilo organization are kept; credentials never reach the key.
     authProviders = isRecord(auth) ? Object.keys(auth).sort() : [];
+    const kilo = isRecord(auth) ? auth.kilo : undefined;
+    if (
+      isRecord(kilo) &&
+      kilo.type === "oauth" &&
+      typeof kilo.accountId === "string"
+    ) {
+      authOrganization = kilo.accountId;
+    }
   } catch {
     // Without auth.json only the config and the environment tell setups apart.
   }
@@ -146,6 +200,11 @@ export async function providerSetupKey(
         disabled: sortedStrings(config.disabled_providers),
         authProviders,
         variables,
+        kiloOrganization: kiloOrganization(
+          config,
+          environment,
+          authOrganization,
+        ),
       }),
     )
     .digest("hex")

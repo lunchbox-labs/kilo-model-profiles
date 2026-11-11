@@ -268,3 +268,168 @@ test("a scout builtin does not create a generic agent when Kilo scout is disable
     "test/search",
   );
 });
+
+test("Kilo loader inputs separate provider setups with or without the core catalog", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "kilo-loader-env-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directories = { data: root, cache: root };
+  for (const cached of [false, true]) {
+    if (cached) {
+      await writeFile(
+        path.join(root, "models.json"),
+        JSON.stringify({ openai: { env: ["OPENAI_API_KEY"] } }),
+      );
+    }
+    const base = await providerSetupKey({}, {}, directories);
+    for (const name of [
+      "KILO_API_KEY",
+      "KILO_ORG_ID",
+      "APERTIS_API_KEY",
+      "APERTIS_BASE_URL",
+      "AZURE_OPENAI_ENDPOINT",
+      "AZURE_OPENAI_RESOURCE_NAME",
+      "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+      "GOOGLE_VERTEX_PROJECT",
+      "GOOGLE_VERTEX_LOCATION",
+      "CLOUDFLARE_GATEWAY_ID",
+      "CLOUDFLARE_API_KEY",
+      "CLOUDFLARE_API_TOKEN",
+      "CF_AIG_TOKEN",
+      "GITLAB_INSTANCE_URL",
+      "GITLAB_TOKEN",
+      "AICORE_SERVICE_KEY",
+      "AICORE_DEPLOYMENT_ID",
+      "AICORE_RESOURCE_GROUP",
+      "SNOWFLAKE_ACCOUNT",
+      "SNOWFLAKE_CORTEX_TOKEN",
+      "SNOWFLAKE_CORTEX_PAT",
+    ]) {
+      assert.notEqual(
+        await providerSetupKey({}, { [name]: "present" }, directories),
+        base,
+        `${name}, catalog cached: ${cached}`,
+      );
+    }
+    assert.equal(
+      await providerSetupKey({}, { KILO_API_KEY: "first-secret" }, directories),
+      await providerSetupKey(
+        {},
+        { KILO_API_KEY: "second-secret" },
+        directories,
+      ),
+      "credential values never enter the setup fingerprint",
+    );
+  }
+});
+
+test("Kilo organization selectors isolate availability and keep credentials out of saved state", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "kilo-org-availability-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directories = { data: root, cache: root };
+  const {
+    availabilityFilePath,
+    knownAvailableModels,
+    rememberAvailableModels,
+  } = await import("../src/fallback.ts");
+  const state = path.join(root, "state");
+  const directory = path.join(root, "project");
+  const personal = await providerSetupKey({}, {}, directories);
+  const first = await providerSetupKey(
+    {},
+    { KILO_ORG_ID: "org-first", KILO_API_KEY: "test-secret" },
+    directories,
+  );
+  const second = await providerSetupKey(
+    {},
+    { KILO_ORG_ID: "org-second", KILO_API_KEY: "test-secret" },
+    directories,
+  );
+  assert.notEqual(first, second);
+  assert.notEqual(first, personal);
+  await rememberAvailableModels(
+    state,
+    directory,
+    first,
+    new Set(["kilo/first-model"]),
+  );
+  assert.equal(await knownAvailableModels(state, directory, second), undefined);
+  assert.equal(
+    await knownAvailableModels(state, directory, personal),
+    undefined,
+  );
+  await rememberAvailableModels(
+    state,
+    directory,
+    second,
+    new Set(["kilo/second-model"]),
+  );
+  assert.deepEqual(
+    await knownAvailableModels(state, directory, first),
+    new Set(["kilo/first-model"]),
+  );
+  assert.deepEqual(
+    await knownAvailableModels(state, directory, second),
+    new Set(["kilo/second-model"]),
+  );
+  const file = availabilityFilePath(state, directory, first);
+  assert.doesNotMatch(
+    file + (await readFile(file, "utf8")),
+    /org-first|test-secret/,
+  );
+});
+
+test("Kilo organization fingerprint follows environment, OAuth account and config precedence", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "kilo-org-precedence-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directories = { data: root, cache: root };
+  const config = (organization: string) => ({
+    provider: { kilo: { options: { kilocodeOrganizationId: organization } } },
+  });
+  const first = await providerSetupKey(config("org-first"), {}, directories);
+  assert.notEqual(
+    first,
+    await providerSetupKey(config("org-second"), {}, directories),
+  );
+  const environment = { KILO_ORG_ID: "org-env" };
+  assert.equal(
+    await providerSetupKey(config("org-first"), environment, directories),
+    await providerSetupKey(config("org-second"), environment, directories),
+  );
+  const authFile = path.join(root, "auth.json");
+  const auth = (accountId: string, access = "secret") =>
+    JSON.stringify({ kilo: { type: "oauth", accountId, access } });
+  await writeFile(authFile, auth("org-auth"));
+  const authFirst = await providerSetupKey(
+    config("org-first"),
+    {},
+    directories,
+  );
+  assert.equal(
+    authFirst,
+    await providerSetupKey(config("org-second"), {}, directories),
+  );
+  await writeFile(authFile, auth("org-other"));
+  assert.notEqual(
+    authFirst,
+    await providerSetupKey(config("org-first"), {}, directories),
+  );
+  await writeFile(authFile, auth("org-auth", "rotated-secret"));
+  assert.equal(
+    authFirst,
+    await providerSetupKey(config("org-first"), {}, directories),
+  );
+  const urlConfig = (organization: string) => ({
+    provider: {
+      kilo: {
+        options: {
+          baseURL: `https://example.invalid/api/organizations/${organization}/openrouter`,
+        },
+      },
+    },
+  });
+  await rm(authFile);
+  assert.notEqual(
+    await providerSetupKey(urlConfig("org-first"), {}, directories),
+    await providerSetupKey(urlConfig("org-second"), {}, directories),
+  );
+});
